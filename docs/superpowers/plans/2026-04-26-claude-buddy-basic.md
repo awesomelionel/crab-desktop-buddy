@@ -34,15 +34,16 @@ claude-buddy/
 │       ├── state.h                 BuddyState enum + state_name + state_derive
 │       └── state.cpp               state derivation + name table
 └── test/
-    └── test_native/
-        ├── test_protocol.cpp       Unity tests for protocol_parse_line
+    ├── test_protocol/
+    │   └── test_protocol.cpp       Unity tests for protocol_parse_line
+    └── test_state/
         └── test_state.cpp          Unity tests for state_derive
 ```
 
 **Why this split:**
 - `lib/protocol/` and `lib/state/` are pure C++ with no Arduino headers, so the same source compiles on both the device target and the `native` host target. PlatformIO auto-discovers them and links them into both envs.
 - `src/ble_bridge.{h,cpp}` and `src/main.cpp` use `BLEDevice` / `Adafruit_ST7789` and only build on the device target. PlatformIO automatically excludes `src/` when running tests on `native` (with `test_build_src` left at its default of `false`).
-- Tests live under `test/test_native/` so `pio test -e native` picks them up.
+- Each test file lives in its own `test/test_<name>/` directory because PlatformIO compiles every `.cpp` under one such directory into a single executable — two files defining `main`/`setUp`/`tearDown` would collide. `pio test -e native` runs both suites and aggregates results.
 
 ---
 
@@ -162,11 +163,11 @@ git commit -m "scaffold: platformio config + dirs"
 **Files:**
 - Create: `lib/protocol/protocol.h`
 - Create: `lib/protocol/protocol.cpp`
-- Create: `test/test_native/test_protocol.cpp`
+- Create: `test/test_protocol/test_protocol.cpp`
 
 - [ ] **Step 1: Write the failing test**
 
-Write `/Users/lioneltan/code/claude-buddy/test/test_native/test_protocol.cpp`:
+Write `/Users/lioneltan/code/claude-buddy/test/test_protocol/test_protocol.cpp`:
 
 ```cpp
 #include <unity.h>
@@ -305,7 +306,7 @@ Expected: `5 Tests 0 Failures 0 Ignored`.
 
 ```bash
 cd /Users/lioneltan/code/claude-buddy
-git add lib/protocol/protocol.h lib/protocol/protocol.cpp test/test_native/test_protocol.cpp
+git add lib/protocol/protocol.h lib/protocol/protocol.cpp test/test_protocol/test_protocol.cpp
 git commit -m "feat: ClaudeStatus + JSON line parser"
 ```
 
@@ -316,11 +317,11 @@ git commit -m "feat: ClaudeStatus + JSON line parser"
 **Files:**
 - Create: `lib/state/state.h`
 - Create: `lib/state/state.cpp`
-- Create: `test/test_native/test_state.cpp`
+- Create: `test/test_state/test_state.cpp`
 
 - [ ] **Step 1: Write the failing test**
 
-Write `/Users/lioneltan/code/claude-buddy/test/test_native/test_state.cpp`:
+Write `/Users/lioneltan/code/claude-buddy/test/test_state/test_state.cpp`:
 
 ```cpp
 #include <unity.h>
@@ -441,7 +442,7 @@ Expected: both test files run; `11 Tests 0 Failures 0 Ignored` total.
 
 ```bash
 cd /Users/lioneltan/code/claude-buddy
-git add lib/state/state.h lib/state/state.cpp test/test_native/test_state.cpp
+git add lib/state/state.h lib/state/state.cpp test/test_state/test_state.cpp
 git commit -m "feat: BuddyState derivation"
 ```
 
