@@ -15,7 +15,7 @@ static void hide(PromptUi* ui) {
     ui->visible          = false;
     ui->flashing         = false;
     ui->flash_text[0]    = 0;
-    ui->flash_deadline_ms = 0;
+    ui->flash_start_ms   = 0;
     // Note: do NOT clear pending_outgoing here. A pending response
     // queued just before hiding (e.g., from CENTER) must still drain.
 }
@@ -31,7 +31,7 @@ static void show(PromptUi* ui, const ClaudePrompt& p) {
     ui->highlight = OPT_APPROVE;
     ui->flashing  = false;
     ui->flash_text[0] = 0;
-    ui->flash_deadline_ms = 0;
+    ui->flash_start_ms = 0;
 }
 
 void prompt_ui_init(PromptUi* ui) {
@@ -42,7 +42,8 @@ void prompt_ui_update(PromptUi* ui, const ClaudePrompt& p,
                       bool live, uint32_t now_ms) {
     // Fire flash → hide first so the rest of the function operates on
     // post-flash state.
-    if (ui->visible && ui->flashing && now_ms >= ui->flash_deadline_ms) {
+    if (ui->visible && ui->flashing &&
+        (uint32_t)(now_ms - ui->flash_start_ms) >= FLASH_MS) {
         hide(ui);
     }
 
@@ -60,9 +61,9 @@ void prompt_ui_update(PromptUi* ui, const ClaudePrompt& p,
     // While flashing (within the flash window), let the flash run its course
     // even if the prompt id is in the dismissed set. The dismissed-id check
     // only suppresses re-showing after the flash hides the UI.
-    if (!ui->flashing && strcmp(p.id, ui->last_dismissed_id) == 0) {
-        // Same id was previously dismissed (and flash has already expired).
-        // Stay (or become) hidden.
+    if (!ui->flashing && strcmp(p.id, ui->last_decided_id) == 0) {
+        // Same id was previously decided (approve/deny/dismiss) and flash has
+        // already expired. Stay (or become) hidden.
         if (ui->visible) hide(ui);
         return;
     }
@@ -87,7 +88,7 @@ static void start_flash(PromptUi* ui, const char* text, uint16_t color,
     strncpy(ui->flash_text, text, sizeof(ui->flash_text) - 1);
     ui->flash_text[sizeof(ui->flash_text) - 1] = 0;
     ui->flash_color = color;
-    ui->flash_deadline_ms = now_ms + FLASH_MS;
+    ui->flash_start_ms = now_ms;
 }
 
 void prompt_ui_button(PromptUi* ui, ButtonEvent ev, uint32_t now_ms) {
@@ -106,22 +107,22 @@ void prompt_ui_button(PromptUi* ui, ButtonEvent ev, uint32_t now_ms) {
             switch (ui->highlight) {
                 case OPT_APPROVE:
                     queue_outgoing(ui, "once");
-                    strncpy(ui->last_dismissed_id, ui->current_id,
-                            sizeof(ui->last_dismissed_id) - 1);
-                    ui->last_dismissed_id[sizeof(ui->last_dismissed_id) - 1] = 0;
+                    strncpy(ui->last_decided_id, ui->current_id,
+                            sizeof(ui->last_decided_id) - 1);
+                    ui->last_decided_id[sizeof(ui->last_decided_id) - 1] = 0;
                     start_flash(ui, "SENT: APPROVE", COLOR_GREEN, now_ms);
                     return;
                 case OPT_DENY:
                     queue_outgoing(ui, "deny");
-                    strncpy(ui->last_dismissed_id, ui->current_id,
-                            sizeof(ui->last_dismissed_id) - 1);
-                    ui->last_dismissed_id[sizeof(ui->last_dismissed_id) - 1] = 0;
+                    strncpy(ui->last_decided_id, ui->current_id,
+                            sizeof(ui->last_decided_id) - 1);
+                    ui->last_decided_id[sizeof(ui->last_decided_id) - 1] = 0;
                     start_flash(ui, "SENT: DENY", COLOR_RED, now_ms);
                     return;
                 case OPT_DISMISS:
-                    strncpy(ui->last_dismissed_id, ui->current_id,
-                            sizeof(ui->last_dismissed_id) - 1);
-                    ui->last_dismissed_id[sizeof(ui->last_dismissed_id) - 1] = 0;
+                    strncpy(ui->last_decided_id, ui->current_id,
+                            sizeof(ui->last_decided_id) - 1);
+                    ui->last_decided_id[sizeof(ui->last_decided_id) - 1] = 0;
                     start_flash(ui, "DISMISSED", COLOR_YELLOW, now_ms);
                     return;
             }
@@ -145,6 +146,7 @@ PromptView prompt_ui_view(const PromptUi* ui) {
 
 bool prompt_ui_take_outgoing(PromptUi* ui, char* buf, size_t buf_len) {
     if (!ui->pending_outgoing_set) return false;
+    if (!buf || buf_len == 0) return false;
     strncpy(buf, ui->pending_outgoing, buf_len - 1);
     buf[buf_len - 1] = 0;
     ui->pending_outgoing_set = false;

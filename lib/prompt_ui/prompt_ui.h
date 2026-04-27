@@ -25,12 +25,12 @@ struct PromptUi {
     char         tool[16];
     char         hint[64];
     PromptOption highlight;
-    char         last_dismissed_id[24];
+    char         last_decided_id[24];
 
     bool         flashing;
     char         flash_text[16];
     uint16_t     flash_color;
-    uint32_t     flash_deadline_ms;
+    uint32_t     flash_start_ms;
 
     bool         pending_outgoing_set;
     char         pending_outgoing[96];
@@ -52,5 +52,7 @@ void prompt_ui_button(PromptUi* ui, ButtonEvent ev, uint32_t now_ms);
 PromptView prompt_ui_view(const PromptUi* ui);
 
 // Drain the queued outgoing JSON line, if any. Returns false if nothing
-// to send. Caller copies into its own buffer; this clears the queue.
+// to send, or if `buf` is null / `buf_len` is 0. On success, fills `buf`
+// with a NUL-terminated string (truncated if buf_len is smaller than
+// the queued line) and clears the queue.
 bool prompt_ui_take_outgoing(PromptUi* ui, char* buf, size_t buf_len);

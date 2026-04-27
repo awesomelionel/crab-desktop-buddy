@@ -97,6 +97,24 @@ static void test_dismiss_is_sticky_per_id(void) {
     TEST_ASSERT_TRUE(prompt_ui_view(&ui).visible);
 }
 
+static void test_approve_is_sticky_per_id(void) {
+    PromptUi ui; prompt_ui_init(&ui);
+    prompt_ui_update(&ui, make_prompt("rA", "Bash", ""), true, 0);
+    prompt_ui_button(&ui, BTN_CENTER, 1);  // approve rA
+    // flash expires
+    prompt_ui_update(&ui, make_prompt("rA", "Bash", ""), true, 600);
+    TEST_ASSERT_FALSE(prompt_ui_view(&ui).visible);
+}
+
+static void test_deny_is_sticky_per_id(void) {
+    PromptUi ui; prompt_ui_init(&ui);
+    prompt_ui_update(&ui, make_prompt("rA", "Bash", ""), true, 0);
+    prompt_ui_button(&ui, BTN_DOWN, 1);   // → DENY
+    prompt_ui_button(&ui, BTN_CENTER, 2); // deny rA
+    prompt_ui_update(&ui, make_prompt("rA", "Bash", ""), true, 600);
+    TEST_ASSERT_FALSE(prompt_ui_view(&ui).visible);
+}
+
 static void test_auto_hide_when_prompt_disappears(void) {
     PromptUi ui; prompt_ui_init(&ui);
     prompt_ui_update(&ui, make_prompt("r1", "Bash", ""), true, 0);
@@ -156,6 +174,8 @@ int main(int, char**) {
     RUN_TEST(test_center_on_deny_emits_deny_json);
     RUN_TEST(test_center_on_dismiss_emits_nothing);
     RUN_TEST(test_dismiss_is_sticky_per_id);
+    RUN_TEST(test_approve_is_sticky_per_id);
+    RUN_TEST(test_deny_is_sticky_per_id);
     RUN_TEST(test_auto_hide_when_prompt_disappears);
     RUN_TEST(test_auto_hide_when_offline);
     RUN_TEST(test_new_id_replaces_visible_prompt);
