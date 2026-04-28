@@ -21,11 +21,11 @@ struct PromptView {
 
 struct PromptUi {
     bool         visible;
-    char         current_id[24];
+    char         current_id[40];
     char         tool[16];
     char         hint[64];
     PromptOption highlight;
-    char         last_decided_id[24];
+    char         last_decided_id[40];
 
     bool         flashing;
     char         flash_text[16];

@@ -4,7 +4,7 @@
 
 struct ClaudePrompt {
     bool present;
-    char id[24];
+    char id[40];    // real Anthropic request IDs are ~30 chars; reference impl uses 40
     char tool[16];
     char hint[64];
 };

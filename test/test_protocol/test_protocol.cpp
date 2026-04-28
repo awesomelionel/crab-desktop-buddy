@@ -93,14 +93,26 @@ static void test_parse_prompt_missing_id_drops(void) {
 }
 
 static void test_parse_prompt_id_too_long_drops(void) {
-    // sizeof(id) == 24, so 23 chars is the longest that fits with NUL.
-    // Send 30 chars → must NOT silently truncate.
+    // sizeof(id) == 40, so 39 chars is the longest that fits with NUL.
+    // Send 40 chars → must NOT silently truncate and echo back a wrong id.
     ClaudeStatus s = {};
     bool ok = protocol_parse_line(
-        "{\"total\":1,\"prompt\":{\"id\":\"abcdefghijklmnopqrstuvwxyz1234\","
+        "{\"total\":1,\"prompt\":{\"id\":\"abcdefghijklmnopqrstuvwxyz12345678901234\","
         "\"tool\":\"Bash\",\"hint\":\"x\"}}", &s);
     TEST_ASSERT_TRUE(ok);
     TEST_ASSERT_FALSE(s.prompt.present);
+}
+
+static void test_parse_prompt_real_id_fits(void) {
+    // Real Anthropic request IDs look like "req_01abc..." (~30 chars).
+    // Regression test: this was the bug — real IDs were silently dropped.
+    ClaudeStatus s = {};
+    bool ok = protocol_parse_line(
+        "{\"total\":1,\"running\":0,\"waiting\":1,\"prompt\":"
+        "{\"id\":\"req_01abc123xyz456def789ghi0\",\"tool\":\"Bash\",\"hint\":\"ls\"}}", &s);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_TRUE(s.prompt.present);
+    TEST_ASSERT_EQUAL_STRING("req_01abc123xyz456def789ghi0", s.prompt.id);
 }
 
 static void test_parse_prompt_hint_sanitizes_unprintable(void) {
@@ -125,6 +137,7 @@ int main(int, char**) {
     RUN_TEST(test_parse_non_snapshot_does_not_clear_prompt);
     RUN_TEST(test_parse_prompt_missing_id_drops);
     RUN_TEST(test_parse_prompt_id_too_long_drops);
+    RUN_TEST(test_parse_prompt_real_id_fits);
     RUN_TEST(test_parse_prompt_hint_sanitizes_unprintable);
     return UNITY_END();
 }

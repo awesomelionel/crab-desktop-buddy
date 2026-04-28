@@ -43,7 +43,7 @@ static Buttons      btns           = {};
 static PromptUi     promptUi       = {};
 static bool         lastPromptVisible    = false;
 static PromptOption lastPromptHighlight  = OPT_APPROVE;
-static char         lastPromptId[24]     = {};
+static char         lastPromptId[40]     = {};
 static bool         lastPromptFlashing   = false;
 
 // Treat the link as live if a snapshot arrived within the heartbeat window.
