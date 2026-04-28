@@ -1,0 +1,29 @@
+{"type":"server-started","port":60908,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:60908","screen_dir":"/Users/lionel/Documents/code/desktop-buddy/.superpowers/brainstorm/70927-1777274088/content","state_dir":"/Users/lionel/Documents/code/desktop-buddy/.superpowers/brainstorm/70927-1777274088/state"}
+{"type":"screen-added","file":"/Users/lionel/Documents/code/desktop-buddy/.superpowers/brainstorm/70927-1777274088/content/eye-style.html"}
+{"type":"screen-updated","file":"/Users/lionel/Documents/code/desktop-buddy/.superpowers/brainstorm/70927-1777274088/content/eye-style.html"}
+{"type":"screen-updated","file":"/Users/lionel/Documents/code/desktop-buddy/.superpowers/brainstorm/70927-1777274088/content/eye-style.html"}
+{"type":"screen-added","file":"/Users/lionel/Documents/code/desktop-buddy/.superpowers/brainstorm/70927-1777274088/content/eye-pixel-style.html"}
+{"type":"screen-updated","file":"/Users/lionel/Documents/code/desktop-buddy/.superpowers/brainstorm/70927-1777274088/content/eye-pixel-style.html"}
+{"type":"screen-updated","file":"/Users/lionel/Documents/code/desktop-buddy/.superpowers/brainstorm/70927-1777274088/content/eye-pixel-style.html"}
+{"type":"screen-updated","file":"/Users/lionel/Documents/code/desktop-buddy/.superpowers/brainstorm/70927-1777274088/content/eye-pixel-style.html"}
+{"type":"screen-added","file":"/Users/lionel/Documents/code/desktop-buddy/.superpowers/brainstorm/70927-1777274088/content/eye-pixel-v2.html"}
+{"type":"screen-updated","file":"/Users/lionel/Documents/code/desktop-buddy/.superpowers/brainstorm/70927-1777274088/content/eye-pixel-v2.html"}
+{"type":"screen-updated","file":"/Users/lionel/Documents/code/desktop-buddy/.superpowers/brainstorm/70927-1777274088/content/eye-pixel-v2.html"}
+{"type":"screen-added","file":"/Users/lionel/Documents/code/desktop-buddy/.superpowers/brainstorm/70927-1777274088/content/eye-pupils-only.html"}
+{"type":"screen-updated","file":"/Users/lionel/Documents/code/desktop-buddy/.superpowers/brainstorm/70927-1777274088/content/eye-pupils-only.html"}
+{"type":"screen-updated","file":"/Users/lionel/Documents/code/desktop-buddy/.superpowers/brainstorm/70927-1777274088/content/eye-pupils-only.html"}
+{"type":"screen-updated","file":"/Users/lionel/Documents/code/desktop-buddy/.superpowers/brainstorm/70927-1777274088/content/eye-pupils-only.html"}
+{"type":"screen-added","file":"/Users/lionel/Documents/code/desktop-buddy/.superpowers/brainstorm/70927-1777274088/content/eye-gap.html"}
+{"type":"screen-updated","file":"/Users/lionel/Documents/code/desktop-buddy/.superpowers/brainstorm/70927-1777274088/content/eye-gap.html"}
+{"type":"screen-updated","file":"/Users/lionel/Documents/code/desktop-buddy/.superpowers/brainstorm/70927-1777274088/content/eye-gap.html"}
+{"source":"user-event","type":"click","text":"Gap: 12 blocks (120 px)","choice":"gap12","id":null,"timestamp":1777274687655}
+{"type":"screen-added","file":"/Users/lionel/Documents/code/desktop-buddy/.superpowers/brainstorm/70927-1777274088/content/eye-animations.html"}
+{"type":"screen-updated","file":"/Users/lionel/Documents/code/desktop-buddy/.superpowers/brainstorm/70927-1777274088/content/eye-animations.html"}
+{"type":"screen-updated","file":"/Users/lionel/Documents/code/desktop-buddy/.superpowers/brainstorm/70927-1777274088/content/eye-animations.html"}
+{"type":"screen-added","file":"/Users/lionel/Documents/code/desktop-buddy/.superpowers/brainstorm/70927-1777274088/content/eye-animations-v2.html"}
+{"type":"screen-updated","file":"/Users/lionel/Documents/code/desktop-buddy/.superpowers/brainstorm/70927-1777274088/content/eye-animations-v2.html"}
+{"type":"screen-updated","file":"/Users/lionel/Documents/code/desktop-buddy/.superpowers/brainstorm/70927-1777274088/content/eye-animations-v2.html"}
+{"type":"screen-added","file":"/Users/lionel/Documents/code/desktop-buddy/.superpowers/brainstorm/70927-1777274088/content/eye-animations-v3.html"}
+{"type":"screen-updated","file":"/Users/lionel/Documents/code/desktop-buddy/.superpowers/brainstorm/70927-1777274088/content/eye-animations-v3.html"}
+{"type":"screen-updated","file":"/Users/lionel/Documents/code/desktop-buddy/.superpowers/brainstorm/70927-1777274088/content/eye-animations-v3.html"}
+{"type":"server-stopped","reason":"idle timeout"}

@@ -1,0 +1,88 @@
+<h2>Retro pixel eyes — size options</h2>
+<p class="subtitle">240×135 display, white pixels on black. Each option shows IDLE state. Pick the pixel grid size that feels right.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="small" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#000;padding:8px;display:flex;justify-content:center;align-items:center;">
+      <canvas id="c1" width="240" height="135" style="image-rendering:pixelated;width:240px;height:135px;display:block;"></canvas>
+    </div>
+    <div class="card-body">
+      <h3>Small pixels (4px blocks)</h3>
+      <p>Finer detail, each eye ~48×40 px. Fits more expression shapes.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="medium" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#000;padding:8px;display:flex;justify-content:center;align-items:center;">
+      <canvas id="c2" width="240" height="135" style="image-rendering:pixelated;width:240px;height:135px;display:block;"></canvas>
+    </div>
+    <div class="card-body">
+      <h3>Medium pixels (6px blocks)</h3>
+      <p>Classic 8-bit look. Eyes ~60×48 px. Bold and readable from a distance.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="large" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#000;padding:8px;display:flex;justify-content:center;align-items:center;">
+      <canvas id="c3" width="240" height="135" style="image-rendering:pixelated;width:240px;height:135px;display:block;"></canvas>
+    </div>
+    <div class="card-body">
+      <h3>Large pixels (8px blocks)</h3>
+      <p>Maximum chunky retro feel. Eyes ~80×64 px. Very bold.</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// Pixel art eye shape (12×9 grid, 1=white, 0=black)
+// Classic oval with circular pupil cutout
+const EYE = [
+  [0,0,1,1,1,1,1,1,0,0,0,0],
+  [0,1,1,1,1,1,1,1,1,1,0,0],
+  [1,1,1,1,1,1,1,1,1,1,1,0],
+  [1,1,1,0,0,0,0,0,1,1,1,1],
+  [1,1,1,0,0,0,0,0,1,1,1,1],
+  [1,1,1,0,0,0,0,0,1,1,1,1],
+  [1,1,1,1,1,1,1,1,1,1,1,0],
+  [0,1,1,1,1,1,1,1,1,1,0,0],
+  [0,0,1,1,1,1,1,1,0,0,0,0],
+];
+
+const EYE_COLS = EYE[0].length;
+const EYE_ROWS = EYE.length;
+
+function drawPixelEyes(canvasId, px) {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext('2d');
+  const W = 240, H = 135;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+
+  const eyeW = EYE_COLS * px;
+  const eyeH = EYE_ROWS * px;
+  const gap = Math.max(px * 4, 16);
+  const totalW = eyeW * 2 + gap;
+  const startX = Math.floor((W - totalW) / 2);
+  const startY = Math.floor((H - eyeH) / 2);
+
+  function drawEye(ox, oy) {
+    ctx.fillStyle = '#fff';
+    for (let r = 0; r < EYE_ROWS; r++) {
+      for (let c = 0; c < EYE_COLS; c++) {
+        if (EYE[r][c]) {
+          ctx.fillRect(ox + c * px, oy + r * px, px, px);
+        }
+      }
+    }
+  }
+
+  drawEye(startX, startY);
+  drawEye(startX + eyeW + gap, startY);
+}
+
+drawPixelEyes('c1', 4);
+drawPixelEyes('c2', 6);
+drawPixelEyes('c3', 8);
+</script>

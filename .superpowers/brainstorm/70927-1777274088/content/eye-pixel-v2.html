@@ -1,0 +1,67 @@
+<h2>Pixel eyes — which size feels right?</h2>
+<p class="subtitle">White filled rectangle + black square pupil, no iris. 240×135 display, exact scale.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="px5" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#111;padding:8px;display:flex;justify-content:center;align-items:center;">
+      <canvas id="c1" width="240" height="135" style="image-rendering:pixelated;width:240px;height:135px;display:block;border:1px solid #333"></canvas>
+    </div>
+    <div class="card-body"><h3>5 px blocks</h3><p>Eyes 60×40 px each. Balanced.</p></div>
+  </div>
+
+  <div class="card" data-choice="px7" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#111;padding:8px;display:flex;justify-content:center;align-items:center;">
+      <canvas id="c2" width="240" height="135" style="image-rendering:pixelated;width:240px;height:135px;display:block;border:1px solid #333"></canvas>
+    </div>
+    <div class="card-body"><h3>7 px blocks</h3><p>Eyes 84×56 px each. Chunkier, fills the screen.</p></div>
+  </div>
+
+  <div class="card" data-choice="px10" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#111;padding:8px;display:flex;justify-content:center;align-items:center;">
+      <canvas id="c3" width="240" height="135" style="image-rendering:pixelated;width:240px;height:135px;display:block;border:1px solid #333"></canvas>
+    </div>
+    <div class="card-body"><h3>10 px blocks</h3><p>Eyes 120×70 px each. Maximum retro bold.</p></div>
+  </div>
+
+</div>
+
+<script>
+// Eye: white rect w/ black pupil square
+// eye shape: 12 wide x 8 tall blocks
+// pupil: 3x3 blocks, offset slightly up-left for "looking" feel
+const EYE_W = 12, EYE_H = 8;
+const PUP_W = 3, PUP_H = 3;
+const PUP_X = 4, PUP_Y = 2; // pupil position inside eye (block coords)
+
+function drawEyes(id, px) {
+  const canvas = document.getElementById(id);
+  const ctx = canvas.getContext('2d');
+  const W = 240, H = 135;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+
+  const eyeW = EYE_W * px;
+  const eyeH = EYE_H * px;
+  const gap = px * 6;
+  const totalW = eyeW * 2 + gap;
+  const ox = Math.floor((W - totalW) / 2);
+  const oy = Math.floor((H - eyeH) / 2);
+
+  function drawEye(x, y) {
+    // White eye body
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(x, y, eyeW, eyeH);
+    // Black pupil
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x + PUP_X * px, y + PUP_Y * px, PUP_W * px, PUP_H * px);
+  }
+
+  drawEye(ox, oy);
+  drawEye(ox + eyeW + gap, oy);
+}
+
+drawEyes('c1', 5);
+drawEyes('c2', 7);
+drawEyes('c3', 10);
+</script>

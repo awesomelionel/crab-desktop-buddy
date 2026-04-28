@@ -1,0 +1,70 @@
+<h2>What style should the eyes have?</h2>
+<p class="subtitle">Each style shows the eyes in <strong>IDLE</strong> state on the 240×135 display. Pick the personality that fits best.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="cartoony" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#000;padding:16px;display:flex;justify-content:center;align-items:center;min-height:120px">
+      <!-- Cartoony eyes: big circles with pupils -->
+      <svg width="200" height="90" viewBox="0 0 200 90">
+        <!-- Left eye -->
+        <ellipse cx="60" cy="45" rx="36" ry="36" fill="white" stroke="#333" stroke-width="2"/>
+        <circle cx="60" cy="45" r="18" fill="#222"/>
+        <circle cx="60" cy="45" r="8" fill="#4af"/>
+        <circle cx="68" cy="37" r="5" fill="white" opacity="0.9"/>
+        <!-- Right eye -->
+        <ellipse cx="140" cy="45" rx="36" ry="36" fill="white" stroke="#333" stroke-width="2"/>
+        <circle cx="140" cy="45" r="18" fill="#222"/>
+        <circle cx="140" cy="45" r="8" fill="#4af"/>
+        <circle cx="148" cy="37" r="5" fill="white" opacity="0.9"/>
+      </svg>
+    </div>
+    <div class="card-body">
+      <h3>Cartoony</h3>
+      <p>Large circular eyes with iris + pupil + catchlight. Expressive and friendly.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="minimal" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#000;padding:16px;display:flex;justify-content:center;align-items:center;min-height:120px">
+      <!-- Minimal eyes: wide flat ellipses -->
+      <svg width="200" height="90" viewBox="0 0 200 90">
+        <!-- Left eye -->
+        <ellipse cx="60" cy="45" rx="44" ry="22" fill="white"/>
+        <ellipse cx="60" cy="45" rx="16" ry="16" fill="#111"/>
+        <ellipse cx="67" cy="39" rx="5" ry="4" fill="white" opacity="0.7"/>
+        <!-- Right eye -->
+        <ellipse cx="140" cy="45" rx="44" ry="22" fill="white"/>
+        <ellipse cx="140" cy="45" rx="16" ry="16" fill="#111"/>
+        <ellipse cx="147" cy="39" rx="5" ry="4" fill="white" opacity="0.7"/>
+      </svg>
+    </div>
+    <div class="card-body">
+      <h3>Minimal / Sleek</h3>
+      <p>Wide flat ovals, clean and modern. Easy to animate open/close for blinking.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="robot" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#000;padding:16px;display:flex;justify-content:center;align-items:center;min-height:120px">
+      <!-- Robot eyes: rounded rectangles, glowing -->
+      <svg width="200" height="90" viewBox="0 0 200 90">
+        <!-- Left eye -->
+        <rect x="16" y="18" width="72" height="54" rx="10" ry="10" fill="#0a2a3a" stroke="#0af" stroke-width="2"/>
+        <rect x="28" y="28" width="48" height="34" rx="6" ry="6" fill="#0cf" opacity="0.85"/>
+        <rect x="36" y="34" width="8" height="6" rx="2" fill="white" opacity="0.6"/>
+        <!-- Right eye -->
+        <rect x="112" y="18" width="72" height="54" rx="10" ry="10" fill="#0a2a3a" stroke="#0af" stroke-width="2"/>
+        <rect x="124" y="28" width="48" height="34" rx="6" ry="6" fill="#0cf" opacity="0.85"/>
+        <rect x="132" y="34" width="8" height="6" rx="2" fill="white" opacity="0.6"/>
+      </svg>
+    </div>
+    <div class="card-body">
+      <h3>Robot / Tech</h3>
+      <p>Rounded rectangles with a glowing blue fill. Matches the device's BLE/tech vibe.</p>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:16px">All three styles blink periodically in idle state and animate differently per device state.</p>

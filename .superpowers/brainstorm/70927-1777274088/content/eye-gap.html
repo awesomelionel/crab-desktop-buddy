@@ -1,0 +1,54 @@
+<h2>How far apart?</h2>
+<p class="subtitle">3×3 blocks (30×30 px) white pupils. Adjust the gap.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="gap9" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#000;padding:8px;display:flex;justify-content:center;align-items:center;">
+      <canvas id="c1" width="240" height="135" style="image-rendering:pixelated;width:240px;height:135px;display:block;border:1px solid #222"></canvas>
+    </div>
+    <div class="card-body"><h3>Gap: 9 blocks (90 px)</h3></div>
+  </div>
+
+  <div class="card" data-choice="gap12" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#000;padding:8px;display:flex;justify-content:center;align-items:center;">
+      <canvas id="c2" width="240" height="135" style="image-rendering:pixelated;width:240px;height:135px;display:block;border:1px solid #222"></canvas>
+    </div>
+    <div class="card-body"><h3>Gap: 12 blocks (120 px)</h3></div>
+  </div>
+
+  <div class="card" data-choice="gap15" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#000;padding:8px;display:flex;justify-content:center;align-items:center;">
+      <canvas id="c3" width="240" height="135" style="image-rendering:pixelated;width:240px;height:135px;display:block;border:1px solid #222"></canvas>
+    </div>
+    <div class="card-body"><h3>Gap: 15 blocks (150 px)</h3></div>
+  </div>
+
+</div>
+
+<script>
+const PX = 10;
+const BLOCKS = 3;
+
+function drawPupils(id, gapBlocks) {
+  const canvas = document.getElementById(id);
+  const ctx = canvas.getContext('2d');
+  const W = 240, H = 135;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+
+  const size = BLOCKS * PX;
+  const gap = gapBlocks * PX;
+  const totalW = size * 2 + gap;
+  const ox = Math.floor((W - totalW) / 2);
+  const oy = Math.floor((H - size) / 2);
+
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(ox, oy, size, size);
+  ctx.fillRect(ox + size + gap, oy, size, size);
+}
+
+drawPupils('c1', 9);
+drawPupils('c2', 12);
+drawPupils('c3', 15);
+</script>

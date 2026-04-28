@@ -1,0 +1,140 @@
+<h2>Animations per state</h2>
+<p class="subtitle">All running live. Tell me which ones to change.</p>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px">
+
+  <div>
+    <div class="label" style="margin-bottom:6px">DISCONNECTED</div>
+    <div style="background:#000;border:1px solid #222;display:inline-block">
+      <canvas id="cDisc" width="240" height="135" style="image-rendering:pixelated;width:240px;height:135px;display:block"></canvas>
+    </div>
+    <p style="margin-top:6px;font-size:13px">Eyes off. Slow pulse every 2s — appears briefly then fades back to black.</p>
+  </div>
+
+  <div>
+    <div class="label" style="margin-bottom:6px">IDLE</div>
+    <div style="background:#000;border:1px solid #222;display:inline-block">
+      <canvas id="cIdle" width="240" height="135" style="image-rendering:pixelated;width:240px;height:135px;display:block"></canvas>
+    </div>
+    <p style="margin-top:6px;font-size:13px">Normal. Blink every ~8s (slower). Occasional glance left or right.</p>
+  </div>
+
+  <div>
+    <div class="label" style="margin-bottom:6px">WORKING</div>
+    <div style="background:#000;border:1px solid #222;display:inline-block">
+      <canvas id="cWork" width="240" height="135" style="image-rendering:pixelated;width:240px;height:135px;display:block"></canvas>
+    </div>
+    <p style="margin-top:6px;font-size:13px">Pupils scan left → right → left repeatedly. Fast and focused.</p>
+  </div>
+
+  <div>
+    <div class="label" style="margin-bottom:6px">WAITING</div>
+    <div style="background:#000;border:1px solid #222;display:inline-block">
+      <canvas id="cWait" width="240" height="135" style="image-rendering:pixelated;width:240px;height:135px;display:block"></canvas>
+    </div>
+    <p style="margin-top:6px;font-size:13px">Pupils look up — expectant, frozen upward gaze. Slow blink.</p>
+  </div>
+
+</div>
+
+<script>
+const PX = 10, S = 3, GAP = 12;
+const W = 240, H = 135;
+const size = S * PX;
+const gap  = GAP * PX;
+const totalW = size * 2 + gap;
+const baseX = Math.floor((W - totalW) / 2);
+const baseY = Math.floor((H - size) / 2);
+
+function clear(ctx) {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawEyes(ctx, lx, ly, rx, ry, alpha) {
+  ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+  ctx.fillRect(lx, ly, size, size);
+  ctx.fillRect(rx, ry, size, size);
+}
+
+// ── DISCONNECTED ─────────────────────────────────────────────────────────────
+;(function() {
+  const ctx = document.getElementById('cDisc').getContext('2d');
+  let t = 0;
+  function frame() {
+    t += 0.018;
+    const phase = (t % (Math.PI * 2));
+    const alpha = Math.max(0, Math.sin(phase) < 0.85 ? 0 : (Math.sin(phase) - 0.85) / 0.15);
+    clear(ctx);
+    drawEyes(ctx, baseX, baseY, baseX + size + gap, baseY, alpha * 0.35);
+    requestAnimationFrame(frame);
+  }
+  frame();
+})();
+
+// ── IDLE: slower blink (~8s) + occasional glance ─────────────────────────────
+;(function() {
+  const ctx = document.getElementById('cIdle').getContext('2d');
+  let blinkAt = 480;
+  let blinking = 0;
+  let glanceDir = 0;
+  let glanceAt = 300;
+  let glancing = 0;
+  const GLANCE_PX = 2 * PX;
+
+  function frame() {
+    if (--blinkAt <= 0) { blinking = 6; blinkAt = 450 + Math.floor(Math.random()*150); }
+    if (blinking > 0) blinking--;
+
+    if (--glanceAt <= 0) {
+      glanceDir = Math.random() > 0.5 ? 1 : -1;
+      glancing = 60;
+      glanceAt = 400 + Math.floor(Math.random()*200);
+    }
+    if (--glancing <= 0) { glancing = 0; glanceDir = 0; }
+
+    const offX = glanceDir * GLANCE_PX;
+    const alpha = blinking > 3 ? 0 : 1;
+    clear(ctx);
+    drawEyes(ctx, baseX + offX, baseY, baseX + size + gap + offX, baseY, alpha);
+    requestAnimationFrame(frame);
+  }
+  frame();
+})();
+
+// ── WORKING: scan left → right ───────────────────────────────────────────────
+;(function() {
+  const ctx = document.getElementById('cWork').getContext('2d');
+  let t = 0;
+  const SCAN = 3 * PX;
+  const SPEED = 0.04;
+
+  function frame() {
+    t += SPEED;
+    const offX = Math.round(Math.sin(t) * SCAN / PX) * PX;
+    clear(ctx);
+    drawEyes(ctx, baseX + offX, baseY, baseX + size + gap + offX, baseY, 1);
+    requestAnimationFrame(frame);
+  }
+  frame();
+})();
+
+// ── WAITING: look up, slow blink ─────────────────────────────────────────────
+;(function() {
+  const ctx = document.getElementById('cWait').getContext('2d');
+  let blinkAt = 180;
+  let blinking = 0;
+  const UP = -2 * PX;
+
+  function frame() {
+    if (--blinkAt <= 0) { blinking = 8; blinkAt = 250 + Math.floor(Math.random()*100); }
+    if (blinking > 0) blinking--;
+
+    const alpha = blinking > 4 ? 0 : 1;
+    clear(ctx);
+    drawEyes(ctx, baseX, baseY + UP, baseX + size + gap, baseY + UP, alpha);
+    requestAnimationFrame(frame);
+  }
+  frame();
+})();
+</script>

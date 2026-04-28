@@ -1,0 +1,176 @@
+<h2>Animations per state</h2>
+<p class="subtitle">All running live. Tell me which ones to change.</p>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px">
+
+  <div>
+    <div class="label" style="margin-bottom:6px">DISCONNECTED</div>
+    <div style="background:#000;border:1px solid #222;display:inline-block">
+      <canvas id="cDisc" width="240" height="135" style="image-rendering:pixelated;width:240px;height:135px;display:block"></canvas>
+    </div>
+    <p style="margin-top:6px;font-size:13px">Eyes off. Slow pulse.</p>
+  </div>
+
+  <div>
+    <div class="label" style="margin-bottom:6px">IDLE</div>
+    <div style="background:#000;border:1px solid #222;display:inline-block">
+      <canvas id="cIdle" width="240" height="135" style="image-rendering:pixelated;width:240px;height:135px;display:block"></canvas>
+    </div>
+    <p style="margin-top:6px;font-size:13px">Slow deliberate blink — eye squishes closed then opens. Occasional glance.</p>
+  </div>
+
+  <div>
+    <div class="label" style="margin-bottom:6px">WORKING</div>
+    <div style="background:#000;border:1px solid #222;display:inline-block">
+      <canvas id="cWork" width="240" height="135" style="image-rendering:pixelated;width:240px;height:135px;display:block"></canvas>
+    </div>
+    <p style="margin-top:6px;font-size:13px">Pupils scan left → right → left.</p>
+  </div>
+
+  <div>
+    <div class="label" style="margin-bottom:6px">WAITING</div>
+    <div style="background:#000;border:1px solid #222;display:inline-block">
+      <canvas id="cWait" width="240" height="135" style="image-rendering:pixelated;width:240px;height:135px;display:block"></canvas>
+    </div>
+    <p style="margin-top:6px;font-size:13px">Pupils look up. Slow blink.</p>
+  </div>
+
+</div>
+
+<script>
+const PX = 10, S = 3, GAP = 12;
+const W = 240, H = 135;
+const size = S * PX;       // 30px — full eye height
+const gap  = GAP * PX;    // 120px
+const totalW = size * 2 + gap;
+const baseX = Math.floor((W - totalW) / 2);
+const baseY = Math.floor((H - size) / 2);
+
+// Blink: eye height steps 30→20→10→0→10→20→30, N frames each step
+const BLINK_HEIGHTS = [20, 10, 0, 10, 20]; // start/end at 30 (open)
+const BLINK_SPF = 7; // frames per step — increase to slow down further
+
+function clear(ctx) {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+}
+
+// Draw one eye: squish by varying height, center-aligned vertically
+function drawEye(ctx, x, offY, eyeH) {
+  if (eyeH <= 0) return;
+  const y = baseY + offY + Math.floor((size - eyeH) / 2);
+  ctx.fillRect(x, y, size, eyeH);
+}
+
+function drawBothEyes(ctx, offX, offY, eyeH) {
+  ctx.fillStyle = '#fff';
+  drawEye(ctx, baseX + offX, offY, eyeH);
+  drawEye(ctx, baseX + size + gap + offX, offY, eyeH);
+}
+
+// Returns current eye height during a blink sequence, or 30 if not blinking
+function blinkHeight(blinkFrame) {
+  // blinkFrame < 0: not blinking → full open
+  if (blinkFrame < 0) return size;
+  const step = Math.floor(blinkFrame / BLINK_SPF);
+  if (step >= BLINK_HEIGHTS.length) return size;
+  return BLINK_HEIGHTS[step];
+}
+
+// ── DISCONNECTED ─────────────────────────────────────────────────────────────
+;(function() {
+  const ctx = document.getElementById('cDisc').getContext('2d');
+  let t = 0;
+  function frame() {
+    t += 0.018;
+    const phase = t % (Math.PI * 2);
+    const alpha = Math.max(0, Math.sin(phase) < 0.85 ? 0 : (Math.sin(phase) - 0.85) / 0.15);
+    clear(ctx);
+    ctx.fillStyle = `rgba(255,255,255,${alpha * 0.35})`;
+    ctx.fillRect(baseX, baseY, size, size);
+    ctx.fillRect(baseX + size + gap, baseY, size, size);
+    requestAnimationFrame(frame);
+  }
+  frame();
+})();
+
+// ── IDLE: slow squish-blink + glance ─────────────────────────────────────────
+;(function() {
+  const ctx = document.getElementById('cIdle').getContext('2d');
+  let blinkCountdown = 480;
+  let blinkFrame = -1;
+  const BLINK_TOTAL = BLINK_HEIGHTS.length * BLINK_SPF;
+
+  let glanceDir = 0;
+  let glanceCountdown = 300;
+  let glanceDuration = 0;
+  const GLANCE_PX = 2 * PX;
+
+  function frame() {
+    // blink
+    if (blinkFrame >= 0) {
+      blinkFrame++;
+      if (blinkFrame >= BLINK_TOTAL) blinkFrame = -1;
+    } else if (--blinkCountdown <= 0) {
+      blinkFrame = 0;
+      blinkCountdown = 450 + Math.floor(Math.random() * 150);
+    }
+
+    // glance
+    if (--glanceCountdown <= 0) {
+      glanceDir = Math.random() > 0.5 ? 1 : -1;
+      glanceDuration = 60;
+      glanceCountdown = 400 + Math.floor(Math.random() * 200);
+    }
+    if (glanceDuration > 0 && --glanceDuration <= 0) glanceDir = 0;
+
+    const offX = glanceDir * GLANCE_PX;
+    const eyeH = blinkHeight(blinkFrame);
+    clear(ctx);
+    drawBothEyes(ctx, offX, 0, eyeH);
+    requestAnimationFrame(frame);
+  }
+  frame();
+})();
+
+// ── WORKING: scan ─────────────────────────────────────────────────────────────
+;(function() {
+  const ctx = document.getElementById('cWork').getContext('2d');
+  let t = 0;
+  const SCAN = 3 * PX;
+
+  function frame() {
+    t += 0.04;
+    const offX = Math.round(Math.sin(t) * SCAN / PX) * PX;
+    clear(ctx);
+    drawBothEyes(ctx, offX, 0, size);
+    requestAnimationFrame(frame);
+  }
+  frame();
+})();
+
+// ── WAITING: look up, slow blink ─────────────────────────────────────────────
+;(function() {
+  const ctx = document.getElementById('cWait').getContext('2d');
+  let blinkCountdown = 180;
+  let blinkFrame = -1;
+  const BLINK_TOTAL = BLINK_HEIGHTS.length * BLINK_SPF;
+  const UP = -2 * PX;
+
+  function frame() {
+    if (blinkFrame >= 0) {
+      blinkFrame++;
+      if (blinkFrame >= BLINK_TOTAL) blinkFrame = -1;
+    } else if (--blinkCountdown <= 0) {
+      blinkFrame = 0;
+      blinkCountdown = 250 + Math.floor(Math.random() * 100);
+    }
+
+    const eyeH = blinkHeight(blinkFrame);
+    clear(ctx);
+    drawBothEyes(ctx, 0, UP, eyeH);
+    requestAnimationFrame(frame);
+  }
+  frame();
+})();
+</script>
