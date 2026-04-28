@@ -1,5 +1,6 @@
 #include "ble_bridge.h"
 #include <Arduino.h>
+#include <string>
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
@@ -33,8 +34,9 @@ static void rxPush(const uint8_t* p, size_t n) {
 
 class RxCallbacks : public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic* c) override {
-        String v = c->getValue();
-        if (v.length() > 0) rxPush((const uint8_t*)v.c_str(), v.length());
+        std::string v = c->getValue();
+        if (!v.empty())
+            rxPush(reinterpret_cast<const uint8_t*>(v.data()), v.size());
     }
 };
 

@@ -4,6 +4,7 @@
 #include <esp_mac.h>
 
 #include "ble_bridge.h"
+#include "eyes.h"
 #include "protocol.h"
 #include "state.h"
 
@@ -12,12 +13,30 @@ static Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
 static const int W = 240;
 static const int H = 135;
 
+enum CardId : uint8_t { CARD_STATUS = 0, CARD_EYES, CARD_NAV_TEST, CARD_COUNT };
+
+static const int           PIN_BTN_NEXT        = 0;
+static const int           PIN_BTN_PREV        = 2;
+static const uint32_t      BTN_DEBOUNCE_MS     = 50;
+static const uint32_t      FRAME_PACING_MS     = 16;
+static const uint8_t       BTN_NEXT_PRESSED_LEVEL = LOW;   // GPIO0 / BOOT
+static const uint8_t       BTN_PREV_PRESSED_LEVEL = HIGH;  // GPIO2 / D2
+
+static CardId   currentCard = CARD_STATUS;
+static EyesAnim eyesAnim    = {};
+
 static char         deviceName[16] = "Claude";
 static ClaudeStatus status         = {};
 static BuddyState   currentState   = STATE_DISCONNECTED;
 static BuddyState   lastDrawnState = (BuddyState)0xFF;
 static char         lastDrawnMsg[sizeof(status.msg)] = {};
 static uint32_t     lastSnapshotMs = 0;
+static bool         eyesFrameValid = false;
+static BuddyState   lastEyesState = (BuddyState)0xFF;
+static uint8_t      lastEyesH = 0;
+static int16_t      lastEyesDx = 0;
+static int16_t      lastEyesBaseY = 0;
+static uint8_t      lastEyesDiscPhase = 0xFF;
 
 // Treat the link as live if a snapshot arrived within the heartbeat window.
 // REFERENCE.md says the desktop sends a keepalive every 10s and to treat
@@ -46,7 +65,7 @@ static void initDisplay() {
     tft.setTextWrap(false);
 }
 
-static void render() {
+static void render_status() {
     tft.fillScreen(ST77XX_BLACK);
 
     // State name, big and centered horizontally near the top half.
@@ -84,12 +103,124 @@ static void render() {
     tft.print(deviceName);
 }
 
+static void render_nav_test() {
+    tft.fillScreen(ST77XX_BLACK);
+    tft.setTextWrap(false);
+
+    tft.setTextSize(2);
+    tft.setTextColor(ST77XX_YELLOW, ST77XX_BLACK);
+    tft.setCursor(18, 20);
+    tft.print("card 3: nav test");
+
+    tft.setTextSize(2);
+    tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+    tft.setCursor(20, 62);
+    tft.print("D0: ");
+    tft.print((digitalRead(PIN_BTN_NEXT) == BTN_NEXT_PRESSED_LEVEL) ? "PRESSED " : "released");
+
+    tft.setCursor(20, 90);
+    tft.print("D2: ");
+    tft.print((digitalRead(PIN_BTN_PREV) == BTN_PREV_PRESSED_LEVEL) ? "PRESSED " : "released");
+}
+
+static void paint_current_card() {
+    if (currentCard == CARD_STATUS) {
+        render_status();
+    } else if (currentCard == CARD_EYES) {
+        eyes_render(tft, eyesAnim, currentState);
+    } else {
+        render_nav_test();
+    }
+}
+
+static void sync_status_meta() {
+    lastDrawnState = currentState;
+    strncpy(lastDrawnMsg, status.msg, sizeof(lastDrawnMsg) - 1);
+    lastDrawnMsg[sizeof(lastDrawnMsg) - 1] = 0;
+}
+
+static void invalidate_non_status_cards() {
+    eyesFrameValid = false;
+}
+
+struct ButtonEdge {
+    uint8_t  pressedLevel;
+    uint8_t  lastReading;
+    uint8_t  stable;
+    uint32_t debounceClock;
+    bool     consumed;
+    bool     initialized;
+};
+
+static bool btn_pressed(int pin, ButtonEdge& b, uint32_t now) {
+    uint8_t r = digitalRead(pin) == LOW ? LOW : HIGH;
+    if (!b.initialized) {
+        b.lastReading = r;
+        b.stable = r;
+        b.debounceClock = now;
+        b.consumed = false;
+        b.initialized = true;
+        return false;
+    }
+    if (r != b.lastReading) {
+        b.debounceClock = now;
+    }
+    b.lastReading = r;
+    if ((now - b.debounceClock) < BTN_DEBOUNCE_MS) {
+        return false;
+    }
+    if (r != b.stable) {
+        b.stable = r;
+        if (b.stable == b.pressedLevel) {
+            if (!b.consumed) {
+                b.consumed = true;
+                return true;
+            }
+        } else {
+            b.consumed = false;
+        }
+    } else if (b.stable != b.pressedLevel) {
+        b.consumed = false;
+    }
+    return false;
+}
+
+static void poll_nav(uint32_t now) {
+    static ButtonEdge nextBtn = {BTN_NEXT_PRESSED_LEVEL, HIGH, HIGH, 0, false, false};
+    static ButtonEdge prevBtn = {BTN_PREV_PRESSED_LEVEL, LOW, LOW, 0, false, false};
+
+    if (btn_pressed(PIN_BTN_NEXT, nextBtn, now)) {
+        currentCard = static_cast<CardId>((currentCard + 1) % CARD_COUNT);
+        if (currentCard == CARD_EYES) {
+            eyes_reset(eyesAnim);
+        } else {
+            sync_status_meta();
+        }
+        invalidate_non_status_cards();
+        paint_current_card();
+    }
+    if (btn_pressed(PIN_BTN_PREV, prevBtn, now)) {
+        currentCard = static_cast<CardId>((currentCard + CARD_COUNT - 1) % CARD_COUNT);
+        if (currentCard == CARD_EYES) {
+            eyes_reset(eyesAnim);
+        } else {
+            sync_status_meta();
+        }
+        invalidate_non_status_cards();
+        paint_current_card();
+    }
+}
+
 void setup() {
     Serial.begin(115200);
     delay(200);
 
     initDeviceName();
     initDisplay();
+
+    pinMode(PIN_BTN_NEXT, INPUT_PULLUP);
+    // D2 on this hardware is active HIGH in the deskhog setup.
+    pinMode(PIN_BTN_PREV, INPUT_PULLDOWN);
 
     // Splash before BLE comes up — BLE init takes ~1s and the screen
     // would otherwise stay black.
@@ -103,17 +234,20 @@ void setup() {
 
     ble_init(deviceName);
 
-    render();  // initial paint with disconnected state
+    currentState = state_derive(status, isLive());
+    paint_current_card();
     lastDrawnState = currentState;
     lastDrawnMsg[0] = 0;
 }
 
 void loop() {
+    uint32_t loop_start = millis();
+
     // Snapshot lines can carry an `entries[]` transcript array; REFERENCE.md
     // caps event payloads at 4KB. 4096 + 1 for the null terminator gives us
     // exactly the max wire size with no headroom games.
-    static char lineBuf[4097];
-    static size_t lineLen = 0;
+    static char   lineBuf[4097];
+    static size_t lineLen      = 0;
     static bool   lineOverflow = false;
 
     while (ble_available()) {
@@ -143,31 +277,63 @@ void loop() {
         }
     }
 
-    BuddyState next = state_derive(status, isLive());
-    bool stateChanged = (next != lastDrawnState);
-    bool msgChanged   = strncmp(lastDrawnMsg, status.msg, sizeof(lastDrawnMsg)) != 0;
-    if (stateChanged || msgChanged) {
-        currentState = next;
-        render();
-        lastDrawnState = next;
-        strncpy(lastDrawnMsg, status.msg, sizeof(lastDrawnMsg) - 1);
-        lastDrawnMsg[sizeof(lastDrawnMsg) - 1] = 0;
-    } else {
-        // Even with no new data, we need to flip to OFFLN once the
-        // 30s timeout elapses. Cheap recheck once a second.
-        static uint32_t lastTick = 0;
-        if (millis() - lastTick > 1000) {
-            lastTick = millis();
-            BuddyState recheck = state_derive(status, isLive());
-            if (recheck != lastDrawnState) {
-                currentState = recheck;
-                render();
-                lastDrawnState = recheck;
-                strncpy(lastDrawnMsg, status.msg, sizeof(lastDrawnMsg) - 1);
-                lastDrawnMsg[sizeof(lastDrawnMsg) - 1] = 0;
+    uint32_t     now  = millis();
+    BuddyState   next = state_derive(status, isLive());
+    currentState      = next;
+
+    poll_nav(now);
+
+    if (currentCard == CARD_STATUS) {
+        bool stateChanged = (next != lastDrawnState);
+        bool msgChanged =
+            strncmp(lastDrawnMsg, status.msg, sizeof(lastDrawnMsg)) != 0;
+        if (stateChanged || msgChanged) {
+            paint_current_card();
+            sync_status_meta();
+        } else {
+            static uint32_t lastTick = 0;
+            if (now - lastTick > 1000) {
+                lastTick = now;
+                BuddyState recheck = state_derive(status, isLive());
+                currentState       = recheck;
+                if (recheck != lastDrawnState) {
+                    paint_current_card();
+                    sync_status_meta();
+                }
             }
+        }
+    } else if (currentCard == CARD_EYES) {
+        eyes_tick(eyesAnim, currentState, now);
+        bool eyesChanged = !eyesFrameValid ||
+                           lastEyesState != currentState ||
+                           lastEyesH != eyesAnim.draw_h ||
+                           lastEyesDx != eyesAnim.draw_dx ||
+                           lastEyesBaseY != eyesAnim.draw_base_y ||
+                           lastEyesDiscPhase != eyesAnim.disc_phase;
+        if (eyesChanged) {
+            paint_current_card();
+            lastEyesState = currentState;
+            lastEyesH = eyesAnim.draw_h;
+            lastEyesDx = eyesAnim.draw_dx;
+            lastEyesBaseY = eyesAnim.draw_base_y;
+            lastEyesDiscPhase = eyesAnim.disc_phase;
+            eyesFrameValid = true;
+        }
+    } else {
+        static bool navInit = false;
+        static uint8_t lastNextRaw = HIGH;
+        static uint8_t lastPrevRaw = HIGH;
+        uint8_t nextRaw = digitalRead(PIN_BTN_NEXT) == LOW ? LOW : HIGH;
+        uint8_t prevRaw = digitalRead(PIN_BTN_PREV) == HIGH ? HIGH : LOW;
+        if (!navInit || nextRaw != lastNextRaw || prevRaw != lastPrevRaw) {
+            paint_current_card();
+            lastNextRaw = nextRaw;
+            lastPrevRaw = prevRaw;
+            navInit = true;
         }
     }
 
-    delay(20);
+    while ((millis() - loop_start) < FRAME_PACING_MS) {
+        yield();
+    }
 }

@@ -2,3 +2,5 @@
 .DS_Store
 .pio/
 .claude/
+/deskhog_src/
+.vscode/
