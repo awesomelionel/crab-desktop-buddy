@@ -38,7 +38,7 @@ static BuddyState   lastEyesState = (BuddyState)0xFF;
 static uint8_t      lastEyesH = 0;
 static int16_t      lastEyesDx = 0;
 static int16_t      lastEyesBaseY = 0;
-static uint8_t      lastEyesDiscPhase = 0xFF;
+static uint32_t     lastEyesDiscAge = 0xFFFFFFFFu;
 static Buttons      btns           = {};
 static PromptUi     promptUi       = {};
 static bool         lastPromptVisible    = false;
@@ -417,14 +417,14 @@ void loop() {
                            lastEyesH != eyesAnim.draw_h ||
                            lastEyesDx != eyesAnim.draw_dx ||
                            lastEyesBaseY != eyesAnim.draw_base_y ||
-                           lastEyesDiscPhase != eyesAnim.disc_phase;
+                           lastEyesDiscAge != eyesAnim.disc_age_ms;
         if (eyesChanged) {
             paint_current_card();
             lastEyesState = currentState;
             lastEyesH = eyesAnim.draw_h;
             lastEyesDx = eyesAnim.draw_dx;
             lastEyesBaseY = eyesAnim.draw_base_y;
-            lastEyesDiscPhase = eyesAnim.disc_phase;
+            lastEyesDiscAge = eyesAnim.disc_age_ms;
             eyesFrameValid = true;
         }
     } else {

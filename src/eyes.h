@@ -7,9 +7,9 @@
 struct EyesAnim {
     BuddyState prev_state;
 
-    // DISCONNECTED pulse
-    uint8_t  disc_phase;    // 0 black, 1 dim eyes
-    uint32_t disc_next_ms;  // next phase transition
+    // DISCONNECTED asleep
+    uint32_t disc_anim_start_ms;  // millis() at entry to STATE_DISCONNECTED
+    uint32_t disc_age_ms;         // cached for render: (now - disc_anim_start_ms)
 
     // Squish-blink (IDLE, WAITING): index into height table, -1 = idle between blinks
     int8_t   blink_i;
