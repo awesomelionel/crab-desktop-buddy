@@ -1,6 +1,6 @@
 #include <unity.h>
 #include <string.h>
-#include "settings.h"
+#include "settings_model.h"
 
 using namespace settings;
 

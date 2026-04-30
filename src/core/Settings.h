@@ -3,7 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "settings.h"
+#include "settings_model.h"
 
 class EventBus;
 

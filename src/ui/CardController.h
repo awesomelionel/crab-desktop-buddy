@@ -9,7 +9,7 @@
 #include "../input/InputRouter.h"
 #include "../net/WifiManager.h"
 #include "prompt_ui.h"
-#include "settings.h"
+#include "settings_model.h"
 #include "cards/EyesCard.h"
 #include "cards/NavTestCard.h"
 #include "cards/PromptCard.h"

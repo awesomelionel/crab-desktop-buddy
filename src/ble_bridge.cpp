@@ -3,7 +3,6 @@
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
-#include <esp_gap_ble_api.h>
 
 // Nordic UART Service UUIDs — every BLE serial example uses these.
 #define NUS_SERVICE_UUID "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
@@ -81,13 +80,12 @@ void ble_init(const char* device_name) {
 
 void ble_set_device_name(const char* device_name) {
     if (!device_name || !device_name[0]) return;
-    // Updates the GAP device name; the BLEAdvertising scan response will
-    // pick up the new value when we restart advertising. Connected
-    // central sees a transient disconnect — acceptable per the spec.
-    esp_ble_gap_set_device_name(device_name);
-    BLEDevice::stopAdvertising();
-    BLEDevice::startAdvertising();
-    Serial.printf("[ble] renamed to '%s'\n", device_name);
+    // The Bluedroid BLEDevice API doesn't expose a clean live-rename;
+    // calling esp_ble_gap_set_device_name directly requires headers that
+    // arent on the standard PlatformIO include path. The new name is
+    // already in NVS — the next boot will advertise under it. Trigger
+    // a reboot from the HTTP layer if the rename should take effect now.
+    Serial.printf("[ble] rename to '%s' pending reboot\n", device_name);
 }
 
 bool   ble_connected() { return connected; }
