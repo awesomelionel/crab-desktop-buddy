@@ -6,6 +6,7 @@
 #include "buttons.h"
 #include "core/AppState.h"
 #include "display/Display.h"
+#include "input/InputRouter.h"
 #include "prompt_ui.h"
 #include "protocol.h"
 #include "state.h"
@@ -19,20 +20,24 @@ static AppState         appState;
 static Adafruit_ST7789& tft = display.tft();
 static constexpr int    W   = Display::W;
 
-static const int      PIN_BTN_NEXT           = 0;
-static const int      PIN_BTN_PREV           = 2;
-static const uint32_t BTN_DEBOUNCE_MS        = 50;
-static const uint32_t FRAME_PACING_MS        = 16;
-static const uint8_t  BTN_NEXT_PRESSED_LEVEL = LOW;   // GPIO0 / BOOT
-static const uint8_t  BTN_PREV_PRESSED_LEVEL = HIGH;  // GPIO2 / D2
+static const int      PIN_BTN_NEXT             = 0;
+static const int      PIN_BTN_PREV             = 2;
+static const int      PIN_BTN_CENTER           = 1;
+static const uint32_t FRAME_PACING_MS          = 16;
+static const uint8_t  BTN_NEXT_PRESSED_LEVEL   = LOW;   // GPIO0 / BOOT
+static const uint8_t  BTN_PREV_PRESSED_LEVEL   = HIGH;  // GPIO2 / D2
+static const uint8_t  BTN_CENTER_PRESSED_LEVEL = HIGH;  // GPIO1 / D1
 
 static StatusCard  statusCard{appState};
 static EyesCard    eyesCard{appState};
 static NavTestCard navTestCard{PIN_BTN_NEXT, BTN_NEXT_PRESSED_LEVEL,
                                PIN_BTN_PREV, BTN_PREV_PRESSED_LEVEL};
 static CardStack   cardStack;
+static InputRouter inputRouter{PIN_BTN_NEXT,   BTN_NEXT_PRESSED_LEVEL,
+                               PIN_BTN_PREV,   BTN_PREV_PRESSED_LEVEL,
+                               PIN_BTN_CENTER, BTN_CENTER_PRESSED_LEVEL,
+                               cardStack};
 
-static Buttons      btns                = {};
 static PromptUi     promptUi            = {};
 static bool         lastPromptVisible   = false;
 static PromptOption lastPromptHighlight = OPT_APPROVE;
@@ -99,72 +104,13 @@ static void render_prompt(const PromptView& v) {
     tft.print(appState.deviceName());
 }
 
-struct ButtonEdge {
-    uint8_t  pressedLevel;
-    uint8_t  lastReading;
-    uint8_t  stable;
-    uint32_t debounceClock;
-    bool     consumed;
-    bool     initialized;
-};
-
-static bool btn_pressed(int pin, ButtonEdge& b, uint32_t now) {
-    uint8_t r = digitalRead(pin) == LOW ? LOW : HIGH;
-    if (!b.initialized) {
-        b.lastReading = r;
-        b.stable = r;
-        b.debounceClock = now;
-        b.consumed = false;
-        b.initialized = true;
-        return false;
-    }
-    if (r != b.lastReading) {
-        b.debounceClock = now;
-    }
-    b.lastReading = r;
-    if ((now - b.debounceClock) < BTN_DEBOUNCE_MS) {
-        return false;
-    }
-    if (r != b.stable) {
-        b.stable = r;
-        if (b.stable == b.pressedLevel) {
-            if (!b.consumed) {
-                b.consumed = true;
-                return true;
-            }
-        } else {
-            b.consumed = false;
-        }
-    } else if (b.stable != b.pressedLevel) {
-        b.consumed = false;
-    }
-    return false;
-}
-
-static void poll_nav(uint32_t now) {
-    static ButtonEdge nextBtn = {BTN_NEXT_PRESSED_LEVEL, HIGH, HIGH, 0, false, false};
-    static ButtonEdge prevBtn = {BTN_PREV_PRESSED_LEVEL, LOW, LOW, 0, false, false};
-
-    if (btn_pressed(PIN_BTN_NEXT, nextBtn, now)) {
-        cardStack.next();
-    }
-    if (btn_pressed(PIN_BTN_PREV, prevBtn, now)) {
-        cardStack.prev();
-    }
-}
-
 void setup() {
     Serial.begin(115200);
     delay(200);
 
     appState.initDeviceName();
     display.begin();
-
-    pinMode(PIN_BTN_NEXT, INPUT_PULLUP);
-    // D2 on this hardware is active HIGH in the deskhog setup.
-    pinMode(PIN_BTN_PREV, INPUT_PULLDOWN);
-    pinMode(1, INPUT_PULLDOWN);  // D1 / center
-    buttons_init(&btns);
+    inputRouter.begin();
     prompt_ui_init(&promptUi);
 
     cardStack.addCard(&statusCard);
@@ -226,10 +172,7 @@ void loop() {
     appState.setBuddyState(state_derive(appState.status(), appState.isLive(now)));
 
     prompt_ui_update(&promptUi, appState.status().prompt, appState.isLive(now), now);
-    bool up_raw     = (digitalRead(2) == HIGH);
-    bool down_raw   = (digitalRead(0) == LOW);
-    bool center_raw = (digitalRead(1) == HIGH);
-    ButtonEvent ev  = buttons_step(&btns, now, up_raw, down_raw, center_raw);
+    ButtonEvent ev = inputRouter.update(now);
     if (ev != BTN_NONE && prompt_ui_view(&promptUi).visible) {
         prompt_ui_button(&promptUi, ev, now);
     }
@@ -245,7 +188,7 @@ void loop() {
 
     PromptView pv = prompt_ui_view(&promptUi);
     if (!pv.visible) {
-        poll_nav(now);
+        inputRouter.dispatch(ev, now);
     }
 
     if (pv.visible) {
