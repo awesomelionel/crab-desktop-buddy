@@ -6,7 +6,7 @@
 #include "../core/AppState.h"
 #include "../core/EventBus.h"
 #include "../net/WifiManager.h"
-#include "../prompt_ui.h"
+#include "prompt_ui.h"
 #include "cards/EyesCard.h"
 #include "cards/NavTestCard.h"
 #include "cards/PromptCard.h"

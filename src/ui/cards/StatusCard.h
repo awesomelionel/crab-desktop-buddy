@@ -5,8 +5,8 @@
 
 #include "../Card.h"
 #include "../../core/AppState.h"
-#include "../../protocol.h"
-#include "../../state.h"
+#include "protocol.h"
+#include "state.h"
 
 class StatusCard : public Card {
 public:

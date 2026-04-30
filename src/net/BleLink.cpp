@@ -5,7 +5,7 @@
 #include "../ble_bridge.h"
 #include "../core/AppState.h"
 #include "../core/EventBus.h"
-#include "../protocol.h"
+#include "protocol.h"
 
 BleLink::BleLink(AppState& app)
     : app_(app), line_buf_{}, line_len_(0), line_overflow_(false) {}

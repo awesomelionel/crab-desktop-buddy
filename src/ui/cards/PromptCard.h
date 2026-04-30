@@ -3,7 +3,7 @@
 #include <stdint.h>
 
 #include "../Card.h"
-#include "../../prompt_ui.h"
+#include "prompt_ui.h"
 
 // Overlay card that wraps the existing PromptUi state machine.
 //

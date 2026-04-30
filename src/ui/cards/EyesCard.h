@@ -5,7 +5,7 @@
 #include "../Card.h"
 #include "../../core/AppState.h"
 #include "../../eyes.h"
-#include "../../state.h"
+#include "state.h"
 
 class EyesCard : public Card {
 public:

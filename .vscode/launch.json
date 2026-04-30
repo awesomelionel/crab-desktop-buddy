@@ -16,6 +16,7 @@
             "projectEnvName": "adafruit_feather_esp32s3_reversetft",
             "toolchainBinDir": "/Users/lioneltan/.platformio/packages/toolchain-xtensa-esp-elf/bin",
             "internalConsoleOptions": "openOnSessionStart",
+            "svdPath": "/Users/lioneltan/.platformio/platforms/espressif32/misc/svd/esp32s3.svd",
             "preLaunchTask": {
                 "type": "PlatformIO",
                 "task": "Pre-Debug"
@@ -28,7 +29,8 @@
             "executable": "/Users/lioneltan/code/claude-buddy/.pio/build/adafruit_feather_esp32s3_reversetft/firmware.elf",
             "projectEnvName": "adafruit_feather_esp32s3_reversetft",
             "toolchainBinDir": "/Users/lioneltan/.platformio/packages/toolchain-xtensa-esp-elf/bin",
-            "internalConsoleOptions": "openOnSessionStart"
+            "internalConsoleOptions": "openOnSessionStart",
+            "svdPath": "/Users/lioneltan/.platformio/platforms/espressif32/misc/svd/esp32s3.svd"
         },
         {
             "type": "platformio-debug",
@@ -38,6 +40,7 @@
             "projectEnvName": "adafruit_feather_esp32s3_reversetft",
             "toolchainBinDir": "/Users/lioneltan/.platformio/packages/toolchain-xtensa-esp-elf/bin",
             "internalConsoleOptions": "openOnSessionStart",
+            "svdPath": "/Users/lioneltan/.platformio/platforms/espressif32/misc/svd/esp32s3.svd",
             "loadMode": "manual"
         }
     ]
