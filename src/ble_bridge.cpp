@@ -1,10 +1,8 @@
 #include "ble_bridge.h"
 #include <Arduino.h>
-#include <string>
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
-#include <BLE2902.h>
 
 // Nordic UART Service UUIDs — every BLE serial example uses these.
 #define NUS_SERVICE_UUID "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
@@ -34,9 +32,9 @@ static void rxPush(const uint8_t* p, size_t n) {
 
 class RxCallbacks : public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic* c) override {
-        std::string v = c->getValue();
-        if (!v.empty())
-            rxPush(reinterpret_cast<const uint8_t*>(v.data()), v.size());
+        String v = c->getValue();
+        if (v.length() > 0)
+            rxPush(reinterpret_cast<const uint8_t*>(v.c_str()), v.length());
     }
 };
 
@@ -63,7 +61,6 @@ void ble_init(const char* device_name) {
 
     txChar = svc->createCharacteristic(
         NUS_TX_UUID, BLECharacteristic::PROPERTY_NOTIFY);
-    txChar->addDescriptor(new BLE2902());
 
     rxChar = svc->createCharacteristic(
         NUS_RX_UUID,
