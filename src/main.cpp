@@ -6,85 +6,38 @@
 #include "buttons.h"
 #include "core/AppState.h"
 #include "display/Display.h"
-#include "eyes.h"
 #include "prompt_ui.h"
 #include "protocol.h"
 #include "state.h"
+#include "ui/CardStack.h"
+#include "ui/cards/EyesCard.h"
+#include "ui/cards/NavTestCard.h"
+#include "ui/cards/StatusCard.h"
 
 static Display          display;
 static AppState         appState;
 static Adafruit_ST7789& tft = display.tft();
 static constexpr int    W   = Display::W;
-static constexpr int    H   = Display::H;
 
-enum CardId : uint8_t { CARD_STATUS = 0, CARD_EYES, CARD_NAV_TEST, CARD_COUNT };
+static const int      PIN_BTN_NEXT           = 0;
+static const int      PIN_BTN_PREV           = 2;
+static const uint32_t BTN_DEBOUNCE_MS        = 50;
+static const uint32_t FRAME_PACING_MS        = 16;
+static const uint8_t  BTN_NEXT_PRESSED_LEVEL = LOW;   // GPIO0 / BOOT
+static const uint8_t  BTN_PREV_PRESSED_LEVEL = HIGH;  // GPIO2 / D2
 
-static const int           PIN_BTN_NEXT        = 0;
-static const int           PIN_BTN_PREV        = 2;
-static const uint32_t      BTN_DEBOUNCE_MS     = 50;
-static const uint32_t      FRAME_PACING_MS     = 16;
-static const uint8_t       BTN_NEXT_PRESSED_LEVEL = LOW;   // GPIO0 / BOOT
-static const uint8_t       BTN_PREV_PRESSED_LEVEL = HIGH;  // GPIO2 / D2
+static StatusCard  statusCard{appState};
+static EyesCard    eyesCard{appState};
+static NavTestCard navTestCard{PIN_BTN_NEXT, BTN_NEXT_PRESSED_LEVEL,
+                               PIN_BTN_PREV, BTN_PREV_PRESSED_LEVEL};
+static CardStack   cardStack;
 
-static CardId   currentCard = CARD_STATUS;
-static EyesAnim eyesAnim    = {};
-
-static BuddyState   lastDrawnState = (BuddyState)0xFF;
-static char         lastDrawnMsg[sizeof(ClaudeStatus::msg)] = {};
-static bool         eyesFrameValid = false;
-static BuddyState   lastEyesState = (BuddyState)0xFF;
-static uint8_t      lastEyesH = 0;
-static int16_t      lastEyesDx = 0;
-static int16_t      lastEyesBaseY = 0;
-static uint32_t     lastEyesDiscAge = 0xFFFFFFFFu;
-static Buttons      btns           = {};
-static PromptUi     promptUi       = {};
-static bool         lastPromptVisible    = false;
-static PromptOption lastPromptHighlight  = OPT_APPROVE;
-static char         lastPromptId[40]     = {};
-static bool         lastPromptFlashing   = false;
-
-static void render_status() {
-    const ClaudeStatus& status = appState.status();
-    const BuddyState    bs     = appState.buddyState();
-    const bool          live   = appState.isLive(millis());
-
-    tft.fillScreen(ST77XX_BLACK);
-
-    // State name, big and centered horizontally near the top half.
-    tft.setTextSize(3);
-    tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
-    const char* name = state_name(bs);
-    int16_t  x1, y1; uint16_t tw, th;
-    tft.getTextBounds(name, 0, 0, &x1, &y1, &tw, &th);
-    tft.setCursor((W - (int)tw) / 2, 20);
-    tft.print(name);
-
-    // Counts row.
-    tft.setTextSize(1);
-    tft.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
-    tft.setCursor(8, 62);
-    tft.printf("total %u  run %u  wait %u",
-               status.total, status.running, status.waiting);
-
-    // Last msg, wrapped manually to ~34 chars per line, two lines max.
-    tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
-    if (status.msg[0]) {
-        tft.setCursor(8, 80);
-        tft.printf("%.34s", status.msg);
-        if (strlen(status.msg) > 34) {
-            tft.setCursor(8, 92);
-            tft.printf("%.34s", status.msg + 34);
-        }
-    }
-
-    // Footer: device name + link state.
-    tft.setTextColor(live ? ST77XX_GREEN : ST77XX_RED, ST77XX_BLACK);
-    tft.setCursor(8, 118);
-    tft.print(live ? "LIVE  " : "OFFLN ");
-    tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
-    tft.print(appState.deviceName());
-}
+static Buttons      btns                = {};
+static PromptUi     promptUi            = {};
+static bool         lastPromptVisible   = false;
+static PromptOption lastPromptHighlight = OPT_APPROVE;
+static char         lastPromptId[40]    = {};
+static bool         lastPromptFlashing  = false;
 
 static void render_prompt(const PromptView& v) {
     tft.fillScreen(ST77XX_BLACK);
@@ -146,46 +99,6 @@ static void render_prompt(const PromptView& v) {
     tft.print(appState.deviceName());
 }
 
-static void render_nav_test() {
-    tft.fillScreen(ST77XX_BLACK);
-    tft.setTextWrap(false);
-
-    tft.setTextSize(2);
-    tft.setTextColor(ST77XX_YELLOW, ST77XX_BLACK);
-    tft.setCursor(18, 20);
-    tft.print("card 3: nav test");
-
-    tft.setTextSize(2);
-    tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
-    tft.setCursor(20, 62);
-    tft.print("D0: ");
-    tft.print((digitalRead(PIN_BTN_NEXT) == BTN_NEXT_PRESSED_LEVEL) ? "PRESSED " : "released");
-
-    tft.setCursor(20, 90);
-    tft.print("D2: ");
-    tft.print((digitalRead(PIN_BTN_PREV) == BTN_PREV_PRESSED_LEVEL) ? "PRESSED " : "released");
-}
-
-static void paint_current_card() {
-    if (currentCard == CARD_STATUS) {
-        render_status();
-    } else if (currentCard == CARD_EYES) {
-        eyes_render(tft, eyesAnim, appState.buddyState());
-    } else {
-        render_nav_test();
-    }
-}
-
-static void sync_status_meta() {
-    lastDrawnState = appState.buddyState();
-    strncpy(lastDrawnMsg, appState.status().msg, sizeof(lastDrawnMsg) - 1);
-    lastDrawnMsg[sizeof(lastDrawnMsg) - 1] = 0;
-}
-
-static void invalidate_non_status_cards() {
-    eyesFrameValid = false;
-}
-
 struct ButtonEdge {
     uint8_t  pressedLevel;
     uint8_t  lastReading;
@@ -233,24 +146,10 @@ static void poll_nav(uint32_t now) {
     static ButtonEdge prevBtn = {BTN_PREV_PRESSED_LEVEL, LOW, LOW, 0, false, false};
 
     if (btn_pressed(PIN_BTN_NEXT, nextBtn, now)) {
-        currentCard = static_cast<CardId>((currentCard + 1) % CARD_COUNT);
-        if (currentCard == CARD_EYES) {
-            eyes_reset(eyesAnim);
-        } else {
-            sync_status_meta();
-        }
-        invalidate_non_status_cards();
-        paint_current_card();
+        cardStack.next();
     }
     if (btn_pressed(PIN_BTN_PREV, prevBtn, now)) {
-        currentCard = static_cast<CardId>((currentCard + CARD_COUNT - 1) % CARD_COUNT);
-        if (currentCard == CARD_EYES) {
-            eyes_reset(eyesAnim);
-        } else {
-            sync_status_meta();
-        }
-        invalidate_non_status_cards();
-        paint_current_card();
+        cardStack.prev();
     }
 }
 
@@ -268,6 +167,10 @@ void setup() {
     buttons_init(&btns);
     prompt_ui_init(&promptUi);
 
+    cardStack.addCard(&statusCard);
+    cardStack.addCard(&eyesCard);
+    cardStack.addCard(&navTestCard);
+
     // Splash before BLE comes up — BLE init takes ~1s and the screen
     // would otherwise stay black.
     tft.setTextSize(2);
@@ -281,9 +184,7 @@ void setup() {
     ble_init(appState.deviceName());
 
     appState.setBuddyState(state_derive(appState.status(), appState.isLive(millis())));
-    paint_current_card();
-    lastDrawnState = appState.buddyState();
-    lastDrawnMsg[0] = 0;
+    statusCard.invalidate();
 }
 
 void loop() {
@@ -317,15 +218,12 @@ void loop() {
         } else if (lineLen < sizeof(lineBuf) - 1) {
             lineBuf[lineLen++] = (char)c;
         } else {
-            // Past the buffer — keep eating until we see a newline so the next
-            // line starts clean. Don't try to parse a truncated payload.
             lineOverflow = true;
         }
     }
 
-    uint32_t     now  = millis();
-    BuddyState   next = state_derive(appState.status(), appState.isLive(now));
-    appState.setBuddyState(next);
+    uint32_t now = millis();
+    appState.setBuddyState(state_derive(appState.status(), appState.isLive(now)));
 
     prompt_ui_update(&promptUi, appState.status().prompt, appState.isLive(now), now);
     bool up_raw     = (digitalRead(2) == HIGH);
@@ -363,62 +261,18 @@ void loop() {
             lastPromptFlashing  = (pv.flash_text != nullptr);
             strncpy(lastPromptId, promptUi.current_id, sizeof(lastPromptId) - 1);
             lastPromptId[sizeof(lastPromptId) - 1] = 0;
-            lastDrawnState = (BuddyState)0xFF;
-            lastDrawnMsg[0] = 0;
-        }
-    } else if (currentCard == CARD_STATUS) {
-        lastPromptVisible = false;
-        bool stateChanged = (next != lastDrawnState);
-        bool msgChanged =
-            strncmp(lastDrawnMsg, appState.status().msg, sizeof(lastDrawnMsg)) != 0;
-        if (stateChanged || msgChanged) {
-            paint_current_card();
-            sync_status_meta();
-        } else {
-            static uint32_t lastTick = 0;
-            if (now - lastTick > 1000) {
-                lastTick = now;
-                BuddyState recheck = state_derive(appState.status(), appState.isLive(now));
-                appState.setBuddyState(recheck);
-                if (recheck != lastDrawnState) {
-                    paint_current_card();
-                    sync_status_meta();
-                }
-            }
-        }
-    } else if (currentCard == CARD_EYES) {
-        BuddyState bs = appState.buddyState();
-        eyes_tick(eyesAnim, bs, now);
-        bool stateJustChanged = !eyesFrameValid || (lastEyesState != bs);
-        bool eyesChanged = stateJustChanged ||
-                           lastEyesH != eyesAnim.draw_h ||
-                           lastEyesDx != eyesAnim.draw_dx ||
-                           lastEyesBaseY != eyesAnim.draw_base_y ||
-                           lastEyesDiscAge != eyesAnim.disc_age_ms;
-        if (eyesChanged) {
-            // Incremental DISCONNECTED frames use a partial erase to avoid the
-            // ~13 ms full-screen black flash that causes visible flicker at 62 fps.
-            bool full_clear = stateJustChanged || (bs != STATE_DISCONNECTED);
-            eyes_render(tft, eyesAnim, bs, full_clear);
-            lastEyesState = bs;
-            lastEyesH = eyesAnim.draw_h;
-            lastEyesDx = eyesAnim.draw_dx;
-            lastEyesBaseY = eyesAnim.draw_base_y;
-            lastEyesDiscAge = eyesAnim.disc_age_ms;
-            eyesFrameValid = true;
+            // Force the underlying card to repaint when the prompt clears.
+            Card* a = cardStack.active();
+            if (a) a->invalidate();
         }
     } else {
-        static bool navInit = false;
-        static uint8_t lastNextRaw = HIGH;
-        static uint8_t lastPrevRaw = HIGH;
-        uint8_t nextRaw = digitalRead(PIN_BTN_NEXT) == LOW ? LOW : HIGH;
-        uint8_t prevRaw = digitalRead(PIN_BTN_PREV) == HIGH ? HIGH : LOW;
-        if (!navInit || nextRaw != lastNextRaw || prevRaw != lastPrevRaw) {
-            paint_current_card();
-            lastNextRaw = nextRaw;
-            lastPrevRaw = prevRaw;
-            navInit = true;
+        if (lastPromptVisible) {
+            // Prompt just closed — make sure the underlying card repaints.
+            Card* a = cardStack.active();
+            if (a) a->invalidate();
         }
+        lastPromptVisible = false;
+        cardStack.tick(now, display);
     }
 
     while ((millis() - loop_start) < FRAME_PACING_MS) {
