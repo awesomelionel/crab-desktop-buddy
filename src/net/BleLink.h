@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 class AppState;
+class EventBus;
 
 // Wraps the C-style ble_bridge module: drains incoming bytes, accumulates
 // them into a 4KB line buffer (per REFERENCE.md), parses each line into
@@ -13,6 +14,10 @@ public:
     explicit BleLink(AppState& app);
 
     void begin(const char* device_name);
+
+    // Optional: publishes EventKind::SnapshotReceived once per successful
+    // line parse.
+    void setEventBus(EventBus* bus) { bus_ = bus; }
 
     // Drain available bytes; for each completed JSON line, parse into
     // appState and stamp markSnapshot(now_ms).
@@ -25,6 +30,7 @@ public:
 
 private:
     AppState& app_;
+    EventBus* bus_ = nullptr;
 
     // Snapshot lines can carry an entries[] transcript; REFERENCE.md caps
     // event payloads at 4KB. 4096 + 1 trailing null = max wire size.

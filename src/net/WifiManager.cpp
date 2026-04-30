@@ -3,6 +3,8 @@
 #include <Arduino.h>
 #include <WiFi.h>
 
+#include "../core/EventBus.h"
+
 namespace {
 constexpr uint32_t INITIAL_RECONNECT_MS = 2000;
 constexpr uint32_t MAX_RECONNECT_MS     = 30000;
@@ -107,6 +109,7 @@ void WifiManager::enterStaConnecting(uint32_t now_ms) {
 }
 
 void WifiManager::enterStaReconnect(uint32_t now_ms) {
+    bool was_connected = (state_ == WifiState::STA_CONNECTED);
     state_ = WifiState::STA_RECONNECT;
     reconnect_at_ms_ = now_ms + reconnect_delay_ms_;
     Serial.printf("[wifi] STA_RECONNECT in %u ms\n", (unsigned)reconnect_delay_ms_);
@@ -114,10 +117,13 @@ void WifiManager::enterStaReconnect(uint32_t now_ms) {
                           ? reconnect_delay_ms_ * 2
                           : MAX_RECONNECT_MS;
     WiFi.disconnect(false, false);
+    if (was_connected && bus_) bus_->publish(EventKind::WifiDisconnected);
 }
 
 void WifiManager::enterStaConnected() {
+    bool was_connected = (state_ == WifiState::STA_CONNECTED);
     state_ = WifiState::STA_CONNECTED;
     reconnect_delay_ms_ = INITIAL_RECONNECT_MS;
     Serial.printf("[wifi] STA_CONNECTED ip=%s\n", WiFi.localIP().toString().c_str());
+    if (!was_connected && bus_) bus_->publish(EventKind::WifiConnected);
 }

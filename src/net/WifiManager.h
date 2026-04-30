@@ -5,6 +5,8 @@
 
 #include "../core/ConfigStore.h"
 
+class EventBus;
+
 enum class WifiState : uint8_t {
     BOOT = 0,
     AP_PROVISIONING,
@@ -20,6 +22,10 @@ public:
     // Reads creds from ConfigStore. If present, kicks off STA_CONNECTING;
     // if absent, transitions to AP_PROVISIONING.
     void begin();
+
+    // Optional: publishes EventKind::WifiConnected on STA_CONNECTED entry
+    // and EventKind::WifiDisconnected on STA_CONNECTED exit.
+    void setEventBus(EventBus* bus) { bus_ = bus; }
 
     // Drives the state machine: handles reconnect backoff.
     void tick(uint32_t now_ms);
@@ -43,6 +49,7 @@ private:
     void enterStaConnected();
 
     ConfigStore& store_;
+    EventBus*    bus_ = nullptr;
     WifiState    state_;
     char         ssid_[ConfigStore::SSID_MAX_LEN + 1];
     char         password_[ConfigStore::PASS_MAX_LEN + 1];

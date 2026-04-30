@@ -4,6 +4,7 @@
 
 #include "../ble_bridge.h"
 #include "../core/AppState.h"
+#include "../core/EventBus.h"
 #include "../protocol.h"
 
 BleLink::BleLink(AppState& app)
@@ -28,6 +29,7 @@ void BleLink::tick(uint32_t now_ms) {
                     if (protocol_parse_line(line_buf_, &app_.mutableStatus())) {
                         app_.markSnapshot(now_ms);
                         Serial.printf("[rx] %s\n", line_buf_);
+                        if (bus_) bus_->publish(EventKind::SnapshotReceived);
                     }
                 }
             }

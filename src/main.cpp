@@ -5,6 +5,7 @@
 #include "buttons.h"
 #include "core/AppState.h"
 #include "core/ConfigStore.h"
+#include "core/EventBus.h"
 #include "display/Display.h"
 #include "input/InputRouter.h"
 #include "net/BleLink.h"
@@ -32,6 +33,7 @@ static const uint8_t  BTN_NEXT_PRESSED_LEVEL   = LOW;   // GPIO0 / BOOT
 static const uint8_t  BTN_PREV_PRESSED_LEVEL   = HIGH;  // GPIO2 / D2
 static const uint8_t  BTN_CENTER_PRESSED_LEVEL = HIGH;  // GPIO1 / D1
 
+static EventBus     eventBus;
 static ConfigStore  configStore;
 static WifiManager  wifiManager{configStore};
 static HttpServer   httpServer{wifiManager, appState, configStore};
@@ -76,7 +78,19 @@ void setup() {
     tft.setCursor(48, 72);
     tft.print(appState.deviceName());
 
+    bleLink.setEventBus(&eventBus);
+    wifiManager.setEventBus(&eventBus);
     bleLink.begin(appState.deviceName());
+
+    // StatusCard wants to repaint immediately whenever a snapshot lands.
+    eventBus.subscribe(EventKind::SnapshotReceived,
+                       [] { statusCard.invalidate(); });
+    // Wi-Fi transitions repaint the WifiCard so the IP/SSID strip is
+    // current the next time the user navigates to it.
+    eventBus.subscribe(EventKind::WifiConnected,
+                       [] { wifiCard.invalidate(); });
+    eventBus.subscribe(EventKind::WifiDisconnected,
+                       [] { wifiCard.invalidate(); });
 
 #ifdef WIFI_DEV_SSID
     if (!configStore.hasCreds()) {
