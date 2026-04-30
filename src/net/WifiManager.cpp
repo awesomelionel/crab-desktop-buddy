@@ -104,7 +104,9 @@ void WifiManager::enterApProvisioning() {
     strncpy(ssid_, ap_ssid, sizeof(ssid_) - 1);
     ssid_[sizeof(ssid_) - 1] = 0;
 
-    WiFi.mode(WIFI_AP);
+    // WIFI_AP_STA (instead of WIFI_AP) lets us scan for nearby networks
+    // while the AP is up — the captive portal needs the SSID list.
+    WiFi.mode(WIFI_AP_STA);
     // Open AP: passphrase=nullptr removes the WPA2 requirement so first-time
     // users can join with one tap. The captive portal is the only thing
     // reachable on the AP, and the AP only exists until creds are saved.
@@ -114,6 +116,28 @@ void WifiManager::enterApProvisioning() {
     }
     Serial.printf("[wifi] AP_PROVISIONING ssid=%s (open) ip=%s\n",
                   ap_ssid, WiFi.softAPIP().toString().c_str());
+
+    // Kick off an initial scan so the dropdown is populated by the time
+    // the user joins the AP and loads the portal.
+    startScan();
+}
+
+void WifiManager::startScan() {
+    int s = WiFi.scanComplete();
+    if (s == WIFI_SCAN_RUNNING) return;
+    // Free the previous result block before starting a new scan.
+    if (s >= 0) WiFi.scanDelete();
+    WiFi.scanNetworks(/*async=*/true, /*show_hidden=*/false);
+    Serial.println("[wifi] scan started");
+}
+
+bool WifiManager::scanRunning() const {
+    return WiFi.scanComplete() == WIFI_SCAN_RUNNING;
+}
+
+int WifiManager::scanResultCount() const {
+    int s = WiFi.scanComplete();
+    return s >= 0 ? s : -1;
 }
 
 void WifiManager::enterStaConnecting(uint32_t now_ms) {

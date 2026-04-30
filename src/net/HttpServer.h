@@ -17,7 +17,7 @@ class AppState;
 // loop) and it will start/stop endpoints as needed.
 class HttpServer {
 public:
-    HttpServer(const WifiManager& wifi, const AppState& app, ConfigStore& config);
+    HttpServer(WifiManager& wifi, const AppState& app, ConfigStore& config);
     ~HttpServer();
 
     void begin();
@@ -32,9 +32,9 @@ private:
     void registerApHandlers();
 
     enum class Role { NONE, STA, AP };
-    const WifiManager& wifi_;
-    const AppState&    app_;
-    ConfigStore&       config_;
+    WifiManager&    wifi_;
+    const AppState& app_;
+    ConfigStore&    config_;
 
     WebServer*  server_;
     DNSServer*  dns_;

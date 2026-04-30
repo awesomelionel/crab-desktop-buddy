@@ -42,7 +42,7 @@ void appendJsonString(String& out, const char* s) {
 }
 }  // namespace
 
-HttpServer::HttpServer(const WifiManager& wifi, const AppState& app, ConfigStore& config)
+HttpServer::HttpServer(WifiManager& wifi, const AppState& app, ConfigStore& config)
     : wifi_(wifi), app_(app), config_(config),
       server_(nullptr), dns_(nullptr), role_(Role::NONE), boot_ms_(0) {}
 
@@ -149,23 +149,122 @@ void HttpServer::registerStaHandlers() {
 
 void HttpServer::registerApHandlers() {
     server_->on("/", HTTP_GET, [this]() {
-        // Tiny zero-dep form. Keep under one MTU.
-        String html =
-            "<!doctype html><meta name=viewport content='width=device-width'>"
+        // Single-page form. The dropdown is populated by /networks via JS;
+        // the user can hit Refresh to rescan. Keep CSS minimal.
+        static const char kPortalHtml[] PROGMEM =
+            "<!doctype html><meta charset=utf-8>"
+            "<meta name=viewport content='width=device-width,initial-scale=1'>"
             "<title>claude-buddy setup</title>"
-            "<style>body{font:16px sans-serif;margin:24px;max-width:360px}"
-            "input,button{font:inherit;width:100%;padding:8px;margin:4px 0;"
-            "box-sizing:border-box}label{display:block;margin-top:12px}</style>"
-            "<h1>claude-buddy</h1><p>Pick a Wi-Fi network and enter the password.</p>"
-            "<form method=POST action=/save>"
-            "<label>SSID<input name=ssid maxlength=32 required></label>"
-            "<label>Password<input name=pass type=password maxlength=64></label>"
-            "<button type=submit>Save &amp; reboot</button></form>";
-        server_->send(200, "text/html", html);
+            "<style>"
+            "body{font:15px -apple-system,system-ui,sans-serif;margin:24px auto;"
+            "max-width:380px;padding:0 12px;color:#222;background:#f6f6f6}"
+            "h1{font-size:20px;margin:0 0 1em}"
+            "label{display:block;margin-top:14px;font-weight:600;font-size:13px}"
+            "select,input,button{width:100%;font:inherit;padding:10px;margin:4px 0;"
+            "border:1px solid #ccc;border-radius:6px;box-sizing:border-box;"
+            "background:#fff}"
+            "button{background:#222;color:#fff;border:none;cursor:pointer;"
+            "margin-top:1em;font-weight:600}"
+            "button.ghost{background:#fff;color:#222;border:1px solid #ccc;"
+            "font-weight:400}"
+            ".muted{color:#666;font-size:13px;margin:6px 0 0}"
+            ".row{display:flex;gap:8px;align-items:flex-end}"
+            ".row select{flex:1}.row .ghost{flex:0 0 auto;width:auto;margin:4px 0}"
+            ".ok{color:#1a7f37}.err{color:#c93232}"
+            "</style>"
+
+            "<h1>claude-buddy setup</h1>"
+
+            "<form id=f method=POST action=/save>"
+            "<label for=ssid>Wi-Fi network</label>"
+            "<div class=row>"
+              "<select id=ssid name=ssid required></select>"
+              "<button type=button class=ghost id=refresh title=Rescan>&#x21bb;</button>"
+            "</div>"
+            "<label for=pass>Password</label>"
+            "<input id=pass name=pass type=password maxlength=64 autocomplete=off>"
+            "<p class=muted>Leave blank if the network is open.</p>"
+            "<button type=submit>Save and reboot</button>"
+            "<p id=msg class=muted></p>"
+            "</form>"
+
+            "<script>"
+            "const sel=document.getElementById('ssid'),"
+                  "msg=document.getElementById('msg'),"
+                  "btn=document.getElementById('refresh');"
+            "function setMsg(t,c){msg.textContent=t;msg.className='muted '+(c||'')}"
+            "async function load(){"
+              "sel.innerHTML='<option value=\"\">scanning...</option>';"
+              "setMsg('');"
+              "try{"
+                "const r=await fetch('/networks');const j=await r.json();"
+                "if(j.scanning){"
+                  "sel.innerHTML='<option value=\"\">scanning...</option>';"
+                  "setTimeout(load,1500);return;"
+                "}"
+                "const list=j.networks||[];"
+                "list.sort((a,b)=>b.rssi-a.rssi);"
+                "sel.innerHTML='<option value=\"\">Select a network</option>';"
+                "for(const n of list){"
+                  "const o=document.createElement('option');"
+                  "o.value=n.ssid;"
+                  "o.textContent=n.ssid+' ('+n.rssi+'dBm'+(n.secure?'':', open')+')';"
+                  "sel.appendChild(o);"
+                "}"
+                "if(!list.length)sel.innerHTML='<option value=\"\">no networks found</option>';"
+              "}catch(e){"
+                "sel.innerHTML='<option value=\"\">scan failed</option>';"
+                "setMsg('scan failed','err');"
+              "}"
+            "}"
+            "btn.onclick=async()=>{"
+              "btn.disabled=true;setMsg('rescanning...');"
+              "try{await fetch('/scan',{method:'POST'});}catch(e){}"
+              "setTimeout(()=>{btn.disabled=false;load();},2200);"
+            "};"
+            "load();"
+            "</script>";
+        server_->send_P(200, "text/html", kPortalHtml);
+    });
+
+    server_->on("/networks", HTTP_GET, [this]() {
+        // JSON: { "scanning": <bool>, "networks": [{ssid,rssi,secure}, ...] }
+        // Trigger a scan if there's no result yet so the first GET kicks
+        // off work without needing the JS to call /scan.
+        bool running = wifi_.scanRunning();
+        int  count   = wifi_.scanResultCount();
+        if (!running && count < 0) {
+            wifi_.startScan();
+            running = true;
+        }
+        String out;
+        out.reserve(512);
+        out += "{\"scanning\":";
+        out += running ? "true" : "false";
+        out += ",\"networks\":[";
+        if (!running && count > 0) {
+            for (int i = 0; i < count; ++i) {
+                if (i) out += ',';
+                out += "{\"ssid\":";
+                appendJsonString(out, WiFi.SSID(i).c_str());
+                out += ",\"rssi\":";
+                out += String(WiFi.RSSI(i));
+                out += ",\"secure\":";
+                out += (WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? "false" : "true";
+                out += '}';
+            }
+        }
+        out += "]}";
+        server_->send(200, "application/json", out);
+    });
+
+    server_->on("/scan", HTTP_POST, [this]() {
+        wifi_.startScan();
+        server_->send(202, "application/json", "{\"status\":\"scanning\"}");
     });
 
     server_->on("/save", HTTP_POST, [this]() {
-        if (!server_->hasArg("ssid")) {
+        if (!server_->hasArg("ssid") || server_->arg("ssid").length() == 0) {
             server_->send(400, "text/plain", "missing ssid");
             return;
         }

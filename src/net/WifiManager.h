@@ -42,6 +42,15 @@ public:
     // True when state() == STA_CONNECTED *and* WiFi reports a usable IP.
     bool        isConnected() const;
 
+    // Async Wi-Fi scan helpers used by the captive portal. startScan()
+    // requests a new scan unless one is already running. scanRunning()
+    // and scanResultCount() let the HTTP layer poll for completion.
+    // The captive portal stays in WIFI_AP_STA mode while in
+    // AP_PROVISIONING so scans can run without dropping the AP.
+    void   startScan();
+    bool   scanRunning() const;
+    int    scanResultCount() const;  // -1 if no scan has completed yet
+
 private:
     void enterApProvisioning();
     void enterStaConnecting(uint32_t now_ms);

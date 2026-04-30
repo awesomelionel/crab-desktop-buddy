@@ -124,7 +124,8 @@ void WifiCard::render(Display& display) {
             tft.print("then go to:");
             tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
             tft.setCursor(8, 110);
-            tft.print("http://192.168.4.1");
+            tft.print("http://");
+            tft.print(wifi_.ip().toString());
 
             renderWifiJoinQr(tft, ap_label);
             break;
