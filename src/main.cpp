@@ -16,6 +16,7 @@
 #include "ui/cards/EyesCard.h"
 #include "ui/cards/NavTestCard.h"
 #include "ui/cards/StatusCard.h"
+#include "ui/cards/WifiCard.h"
 
 static Display          display;
 static AppState         appState;
@@ -35,6 +36,7 @@ static WifiManager  wifiManager{configStore};
 
 static StatusCard  statusCard{appState};
 static EyesCard    eyesCard{appState};
+static WifiCard    wifiCard{wifiManager};
 static NavTestCard navTestCard{PIN_BTN_NEXT, BTN_NEXT_PRESSED_LEVEL,
                                PIN_BTN_PREV, BTN_PREV_PRESSED_LEVEL};
 static CardStack   cardStack;
@@ -121,6 +123,7 @@ void setup() {
 
     cardStack.addCard(&statusCard);
     cardStack.addCard(&eyesCard);
+    cardStack.addCard(&wifiCard);
     cardStack.addCard(&navTestCard);
 
     // Splash before BLE comes up — BLE init takes ~1s and the screen
