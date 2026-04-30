@@ -1,13 +1,55 @@
 #include "WifiCard.h"
 
 #include <Arduino.h>
+#include <qrcode.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "../../display/Display.h"
 
 namespace {
 constexpr uint32_t SPINNER_TICK_MS = 400;
+
+// QR layout for the AP_PROVISIONING screen. Version 3 (29x29 modules)
+// at scale 3 fits the 240x135 display with text on the left.
+constexpr uint8_t  QR_VERSION = 3;
+constexpr uint8_t  QR_SCALE   = 3;
+constexpr int      QR_X       = 138;  // top-left of the QR (modules)
+constexpr int      QR_Y       = 24;
+constexpr int      QR_QUIET   = 4;    // module-wide quiet zone
+
+void renderWifiJoinQr(Adafruit_ST7789& tft, const char* ssid) {
+    // Standard "Wi-Fi network configuration" URI; T:nopass means open AP.
+    // Format: WIFI:T:nopass;S:<ssid>;;
+    char payload[80];
+    snprintf(payload, sizeof(payload), "WIFI:T:nopass;S:%s;;",
+             (ssid && ssid[0]) ? ssid : "claude-buddy");
+
+    QRCode qr;
+    uint8_t buf[qrcode_getBufferSize(QR_VERSION)];
+    qrcode_initText(&qr, buf, QR_VERSION, ECC_LOW, payload);
+
+    // Scanners need a quiet zone of light modules around the QR. Paint a
+    // white background that's bigger than the QR by QR_QUIET modules per
+    // side, then draw black modules on top.
+    int side  = qr.size * QR_SCALE;
+    int quiet = QR_QUIET * QR_SCALE;
+    tft.fillRect(QR_X - quiet, QR_Y - quiet,
+                 side + 2 * quiet, side + 2 * quiet,
+                 ST77XX_WHITE);
+
+    for (uint8_t y = 0; y < qr.size; y++) {
+        for (uint8_t x = 0; x < qr.size; x++) {
+            if (qrcode_getModule(&qr, x, y)) {
+                tft.fillRect(QR_X + x * QR_SCALE,
+                             QR_Y + y * QR_SCALE,
+                             QR_SCALE, QR_SCALE,
+                             ST77XX_BLACK);
+            }
+        }
+    }
 }
+}  // namespace
 
 WifiCard::WifiCard(const WifiManager& wifi)
     : wifi_(wifi),
@@ -64,22 +106,27 @@ void WifiCard::render(Display& display) {
     switch (wifi_.state()) {
         case WifiState::BOOT:
         case WifiState::AP_PROVISIONING: {
+            const char* ap = wifi_.ssid();
+            const char* ap_label = (ap && ap[0]) ? ap : "claude-buddy";
+
             tft.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
-            tft.setCursor(8, 36);
-            tft.print("provisioning needed");
+            tft.setCursor(8, 32);
+            tft.print("scan to join");
 
             tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
             tft.setCursor(8, 56);
-            tft.print("AP: ");
-            const char* ap = wifi_.ssid();
-            tft.print(ap[0] ? ap : "claude-buddy");
-
+            tft.print("or AP:");
             tft.setCursor(8, 70);
-            tft.print("URL: http://192.168.4.1");
+            tft.print(ap_label);
 
-            tft.setTextColor(ST77XX_RED, ST77XX_BLACK);
-            tft.setCursor(8, 100);
-            tft.print("connect to AP to setup");
+            tft.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
+            tft.setCursor(8, 96);
+            tft.print("then go to:");
+            tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+            tft.setCursor(8, 110);
+            tft.print("http://192.168.4.1");
+
+            renderWifiJoinQr(tft, ap_label);
             break;
         }
         case WifiState::STA_CONNECTING:
