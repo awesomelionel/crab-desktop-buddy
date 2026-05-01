@@ -10,17 +10,11 @@
 namespace {
 
 const uint16_t kDimGrey   = 0x18C3;
-const uint16_t kSweatBlue = 0x65FF;  // R≈99 G≈190 B≈255
 const int      kEyeW      = 30;
 const int      kLeftX     = 30;
 const int      kRightX    = 180;
 const int      kBaseIdleY = 52;
 const int      kBaseWaitY = 32;
-const int      kActionH   = 14;   // squint half-height for "> <"
-const int      kSweatCX   = 195;  // x-centre of sweat drop (above right eye)
-const int      kSweatTipY = 25;   // resting y of teardrop tip
-const uint32_t kDripMs    = 2000; // drip cycle length in ms
-const int      kDripSteps = 8;    // how many px it drops per cycle
 
 const int      kLidH      = 10;
 const int      kZSpawnX   = 210;
@@ -87,7 +81,8 @@ EyesCard::EyesCard(const AppState& state)
     last_h_        = 0;
     last_dx_       = 0;
     last_base_y_   = 0;
-    last_sweat_y_  = 0;
+    last_blink_h_  = -1;
+    last_dots_n_   = 0;
     last_disc_age_ = 0xFFFFFFFFu;
 }
 
@@ -113,7 +108,11 @@ void EyesCard::resetAnim() {
     draw_h_                  = 30;
     draw_dx_                 = 0;
     draw_base_y_             = kBaseIdleY;
-    draw_sweat_y_            = 0;
+    next_work_blink_ms_           = now;
+    work_blink_step_deadline_ms_  = 0;
+    draw_work_blink_i_            = -1;
+    draw_blink_h_                 = -1;
+    draw_dots_n_                  = 0;
 }
 
 void EyesCard::armState(BuddyState state, uint32_t now) {
@@ -259,7 +258,8 @@ bool EyesCard::isDirty() const {
     if (last_h_        != draw_h_)            return true;
     if (last_dx_       != draw_dx_)           return true;
     if (last_base_y_   != draw_base_y_)       return true;
-    if (last_sweat_y_  != draw_sweat_y_)      return true;
+    if (last_blink_h_  != draw_blink_h_)      return true;
+    if (last_dots_n_   != draw_dots_n_)       return true;
     if (last_disc_age_ != disc_age_ms_)       return true;
     return false;
 }
@@ -277,7 +277,8 @@ void EyesCard::render(Display& display) {
     last_h_        = draw_h_;
     last_dx_       = draw_dx_;
     last_base_y_   = draw_base_y_;
-    last_sweat_y_  = draw_sweat_y_;
+    last_blink_h_  = draw_blink_h_;
+    last_dots_n_   = draw_dots_n_;
     last_disc_age_ = disc_age_ms_;
     frame_valid_   = true;
 }

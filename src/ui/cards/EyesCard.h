@@ -41,11 +41,10 @@ private:
     uint32_t   next_glance_ms_;
     uint32_t   glance_return_ms_;
     bool       glance_swing_pending_;     // true after first half of a L↔R sweep
-    uint32_t   scan_epoch_ms_;            // WORKING scan + sweat origin
+    uint32_t   scan_epoch_ms_;            // WORKING animation time origin
     uint8_t    draw_h_;
     int16_t    draw_dx_;
     int16_t    draw_base_y_;
-    int8_t     draw_sweat_y_;
 
     // STATE_WORKING — rare blink, separate timer to avoid coupling with IDLE/WAITING blink_i_.
     uint32_t   next_work_blink_ms_;
@@ -61,7 +60,6 @@ private:
     uint8_t    last_h_;
     int16_t    last_dx_;
     int16_t    last_base_y_;
-    int8_t     last_sweat_y_;
     int8_t     last_blink_h_;
     uint8_t    last_dots_n_;
     uint32_t   last_disc_age_;
