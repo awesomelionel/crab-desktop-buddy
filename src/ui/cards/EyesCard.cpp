@@ -32,6 +32,16 @@ const uint32_t kZLoopMs   = 3000;
 const uint8_t kBlinkH[] = {30, 20, 10, 0, 10, 20, 30};
 const int     kBlinkN   = 7;
 
+// Idle-face timing knobs. Curious-and-alert feel: blink ~every 4.5 s with
+// snappier per-step animation, and dart eyes diagonally up-and-side every
+// 2.5–4.5 s with a short ~0.6 s hold before returning to centre.
+const uint32_t kBlinkIntervalMs = 4500;
+const uint32_t kBlinkStepMs     = 70;
+const uint32_t kGlanceMinMs     = 2500;
+const uint32_t kGlanceJitterMs  = 2000;
+const uint32_t kGlanceHoldMs    = 600;
+const int      kGlanceDy        = -10;  // negative = up; applied while glancing
+
 }  // namespace
 
 EyesCard::EyesCard(const AppState& state)
@@ -58,11 +68,12 @@ void EyesCard::resetAnim() {
     disc_anim_start_ms_      = now;
     disc_age_ms_             = 0;
     blink_i_                 = -1;
-    next_blink_ms_           = now + 8000;
+    next_blink_ms_           = now + kBlinkIntervalMs;
     blink_step_deadline_ms_  = 0;
     glance_x_                = 0;
-    next_glance_ms_          = now + 5000 + (esp_random() % 4000);
+    next_glance_ms_          = now + kGlanceMinMs + (esp_random() % kGlanceJitterMs);
     glance_return_ms_        = 0;
+    glance_swing_pending_    = false;
     scan_epoch_ms_           = now;
     draw_h_                  = 30;
     draw_dx_                 = 0;
@@ -78,18 +89,19 @@ void EyesCard::armState(BuddyState state, uint32_t now) {
             disc_age_ms_        = 0;
             break;
         case STATE_IDLE:
-            blink_i_           = -1;
-            next_blink_ms_     = now + 8000;
-            glance_x_          = 0;
-            next_glance_ms_    = now + 5000 + (esp_random() % 4000);
-            glance_return_ms_  = 0;
+            blink_i_              = -1;
+            next_blink_ms_        = now + kBlinkIntervalMs;
+            glance_x_             = 0;
+            next_glance_ms_       = now + kGlanceMinMs + (esp_random() % kGlanceJitterMs);
+            glance_return_ms_     = 0;
+            glance_swing_pending_ = false;
             break;
         case STATE_WORKING:
             scan_epoch_ms_ = now;
             break;
         case STATE_WAITING:
             blink_i_       = -1;
-            next_blink_ms_ = now + 8000;
+            next_blink_ms_ = now + kBlinkIntervalMs;
             break;
     }
 }
@@ -100,30 +112,38 @@ void EyesCard::tickBlink(uint32_t now) {
             blink_i_++;
             if (blink_i_ >= kBlinkN) {
                 blink_i_       = -1;
-                next_blink_ms_ = now + 8000;
+                next_blink_ms_ = now + kBlinkIntervalMs;
             } else {
-                blink_step_deadline_ms_ = now + 100;
+                blink_step_deadline_ms_ = now + kBlinkStepMs;
             }
         }
     } else if (now >= next_blink_ms_) {
         blink_i_                 = 0;
-        blink_step_deadline_ms_  = now + 100;
+        blink_step_deadline_ms_  = now + kBlinkStepMs;
     }
 }
 
 void EyesCard::tickGlanceIdle(uint32_t now) {
     if (glance_x_ != 0) {
         if (glance_return_ms_ != 0 && now >= glance_return_ms_) {
-            glance_x_         = 0;
-            glance_return_ms_ = 0;
-            next_glance_ms_   = now + 5000 + (esp_random() % 4000);
+            if (glance_swing_pending_) {
+                // Swing across to the opposite side for the second half of
+                // the sweep, so each curiosity event covers both directions.
+                glance_x_             = -glance_x_;
+                glance_swing_pending_ = false;
+                glance_return_ms_     = now + kGlanceHoldMs;
+            } else {
+                glance_x_         = 0;
+                glance_return_ms_ = 0;
+                next_glance_ms_   = now + kGlanceMinMs + (esp_random() % kGlanceJitterMs);
+            }
         }
         return;
     }
     if (now >= next_glance_ms_) {
-        glance_x_         = (esp_random() & 1) ? 20 : -20;
-        // Hold offset ~1 s then return.
-        glance_return_ms_ = now + 1000;
+        glance_x_             = (esp_random() & 1) ? 20 : -20;
+        glance_swing_pending_ = true;
+        glance_return_ms_     = now + kGlanceHoldMs;
     }
 }
 
@@ -139,7 +159,7 @@ void EyesCard::tick(uint32_t now_ms) {
         case STATE_IDLE:
             tickBlink(now_ms);
             tickGlanceIdle(now_ms);
-            draw_base_y_ = kBaseIdleY;
+            draw_base_y_ = kBaseIdleY + (glance_x_ != 0 ? kGlanceDy : 0);
             draw_dx_     = glance_x_;
             draw_h_      = (blink_i_ >= 0) ? kBlinkH[blink_i_] : 30;
             break;

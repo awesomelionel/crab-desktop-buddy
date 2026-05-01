@@ -39,6 +39,7 @@ private:
     int16_t    glance_x_;                 // IDLE side-glance x offset
     uint32_t   next_glance_ms_;
     uint32_t   glance_return_ms_;
+    bool       glance_swing_pending_;     // true after first half of a L↔R sweep
     uint32_t   scan_epoch_ms_;            // WORKING scan + sweat origin
     uint8_t    draw_h_;
     int16_t    draw_dx_;
