@@ -224,7 +224,7 @@ This is firmware on a TFT display. Verification is on-device visual plus a stati
 - **Dots cycle correctly:** 0 → 1 → 2 → 3 → 0 every 1.5 s, no leftover dot pixels.
 - **No sweat-drop residue:** the corner where the old blue teardrop appeared shows pure black.
 
-The existing `cdb/` simulator builds the same `EyesCard.cpp` and can render the animation on macOS for fast iteration without flashing the device — recommended for tuning the timings.
+No simulator covers `EyesCard.cpp` (the `cdb/` desktop project only renders Buddy characters, not the eyes card). Iteration requires flashing to the Adafruit Feather ESP32-S3 device.
 
 ## Out of scope
 
