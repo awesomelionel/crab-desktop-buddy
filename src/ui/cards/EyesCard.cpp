@@ -321,3 +321,32 @@ void EyesCard::drawFrame(Adafruit_ST7789& tft, BuddyState state, bool full_clear
     tft.fillRect(kLeftX  + draw_dx_, top, kEyeW, h, ST77XX_WHITE);
     tft.fillRect(kRightX + draw_dx_, top, kEyeW, h, ST77XX_WHITE);
 }
+
+void EyesCard::drawRotatedSlit(Adafruit_ST7789& tft, int cx, int cy, int h, int sign) {
+    if (h <= 0) return;
+
+    // Width-axis basis (constant; width = kEyeW). For sign = -1, negate the y component.
+    const float ux = (kEyeW * 0.5f) * kCos15;
+    const float uy = (kEyeW * 0.5f) * kSin15 * (float)sign;
+
+    // Height-axis basis (per-frame because h varies). For sign = -1, negate the x component.
+    const float halfH = h * 0.5f;
+    const float vx = -halfH * kSin15 * (float)sign;
+    const float vy =  halfH * kCos15;
+
+    // Four corners (top-left, top-right, bottom-right, bottom-left).
+    // R(+θ)·(±W/2, ±h/2) — y-axis points DOWN in screen coords, but the same
+    // formula works because we treat (vx, vy) as the vertical-edge offset.
+    const int16_t tlx = (int16_t)lroundf(cx - ux + vx);
+    const int16_t tly = (int16_t)lroundf(cy - uy + vy);
+    const int16_t trx = (int16_t)lroundf(cx + ux + vx);
+    const int16_t try_ = (int16_t)lroundf(cy + uy + vy);
+    const int16_t brx = (int16_t)lroundf(cx + ux - vx);
+    const int16_t bry = (int16_t)lroundf(cy + uy - vy);
+    const int16_t blx = (int16_t)lroundf(cx - ux - vx);
+    const int16_t bly = (int16_t)lroundf(cy - uy - vy);
+
+    // Two triangles split the parallelogram along the TL→BR diagonal.
+    tft.fillTriangle(tlx, tly, trx, try_, brx, bry, ST77XX_WHITE);
+    tft.fillTriangle(tlx, tly, brx, bry, blx, bly, ST77XX_WHITE);
+}

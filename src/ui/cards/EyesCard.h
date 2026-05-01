@@ -26,6 +26,7 @@ private:
     void tickBlink(uint32_t now_ms);
     void tickGlanceIdle(uint32_t now_ms);
     void drawFrame(Adafruit_ST7789& tft, BuddyState state, bool full_clear);
+    void drawRotatedSlit(Adafruit_ST7789& tft, int cx, int cy, int h, int sign);
 
     const AppState& state_;
 
