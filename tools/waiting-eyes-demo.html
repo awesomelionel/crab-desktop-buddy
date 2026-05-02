@@ -177,7 +177,7 @@
     ctx.fillRect(x + w - 1, y, 1, h);
 
     // small "?" indicator on the left
-    ctx.fillStyle = litFlash ? '#000' : '#fc6';
+    ctx.fillStyle = litFlash ? '#000' : '#ff7700';
     ctx.font = 'bold 10px ui-monospace, monospace';
     ctx.textBaseline = 'middle';
     ctx.fillText('?', x + 6, y + h / 2 + 1);
@@ -229,7 +229,7 @@
       const alpha = 1 - t;
       // per-bubble base size; shrinks ~10% as it rises for a subtle depth cue
       const size = b.size * (0.9 + 0.1 * (1 - t));
-      ctx.fillStyle = `rgba(255, 220, 120, ${alpha.toFixed(3)})`;
+      ctx.fillStyle = `rgba(255, 119, 0, ${alpha.toFixed(3)})`;
       ctx.font = `bold ${size.toFixed(1)}px ui-monospace, monospace`;
       ctx.fillText('?', x, y);
     }

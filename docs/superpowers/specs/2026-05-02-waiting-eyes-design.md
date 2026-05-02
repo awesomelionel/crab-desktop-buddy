@@ -124,10 +124,10 @@ y = 135 └───────────────────────
 |------------------------|---------------------------------|---------------------------------------------|
 | Background             | `ST77XX_BLACK`                  | unchanged                                   |
 | Eyes                   | `ST77XX_WHITE`                  | unchanged                                   |
-| Question marks         | RGB565 ≈ `0xFEC8` (amber/yellow)| matches the demo's `rgba(255,220,120)`      |
+| Question marks         | bright orange, RGB565 `0xFBA0` (≈ `#FF7700`) | applies to both floating ?s and the badge `?` icon |
 | Badge body             | `ST77XX_BLACK`                  | inherits screen background                  |
 | Badge border (1 px)    | mid-grey (e.g. `0x7BEF`)        | distinct from white eyes, less attention than badge label |
-| Badge `?` icon         | amber, same as floating ?s      | visual link to the question marks           |
+| Badge `?` icon         | bright orange, same as floating ?s | visual link to the question marks         |
 | Badge label text       | white                           | "Tool · approve?"                           |
 | Badge press hint       | dim grey                        | "press ●"                                   |
 | Footer LIVE pill       | green (`ST77XX_GREEN`)          | unchanged behaviour                         |
@@ -409,12 +409,13 @@ not need to know the mode — `prompt_ui_button` handles per-mode logic.
 
 ### Footer
 
-The footer is currently rendered by individual cards. With `kFooterH`
-bumped from existing to 18 px (and the LIVE pill recentred), the change
-applies project-wide, not just to WAITING. Confirm with the user before
-landing — alternative is to keep the global footer at its current size
-and only bump it on the WAITING/COLLAPSED card. The demo uses 18 px
-because the existing 8 px text was clipped vertically.
+The footer is currently rendered by individual cards. `kFooterH` is
+bumped to 18 px (LIVE pill recentred, label font bumped to 9 px) and
+the change is applied project-wide so every card gets the more legible
+footer, not just the WAITING/COLLAPSED card. Existing card layouts that
+draw content right up to the old footer line need to lose a few pixels
+of vertical room on the bottom — audit each card during implementation
+and adjust if needed.
 
 ## Performance budget
 
@@ -472,19 +473,9 @@ verifying:
 - Animating the badge itself (pulse, shimmer). Static for v1.
 - Changes to other states (IDLE, WORKING, DISCONNECTED).
 
-## Open questions for review
+## Resolved during review
 
-1. **Footer height bump.** The demo uses 18 px (up from existing 8 px text).
-   Apply globally or only on the WAITING card? Globally is simpler and
-   makes the LIVE pill more legible everywhere — but it's a visual change
-   to states that aren't being redesigned.
-2. **Question-mark colour.** Demo uses amber/yellow (`#FFDC78`). On the
-   real ST7789 panel that maps to RGB565 ≈ `0xFEC8`. Confirm the colour
-   reads well against pure black on the actual device — could swap to
-   white if amber doesn't survive the colour-space mapping.
-3. **Sticky-decided semantics for Dismiss.** The proposal is that Dismiss
-   no longer marks the id as "done", so a `Dismiss → snapshot drops →
-   snapshot returns same id` would re-expand. This is a behaviour change
-   from today. Confirm acceptable, or keep Dismiss sticky as today (in
-   which case Dismiss should still collapse to badge, but the badge
-   would not re-expand into the same id once the desktop drops/re-sends).
+- Footer height bump applies globally, not only to the WAITING card.
+- Question-mark colour is bright orange (`#FF7700` / RGB565 `0xFBA0`).
+- Dismiss no longer adds the id to `last_decided_id`. Only Approve and
+  Deny are sticky; a `Dismiss → drops → re-sends same id` cycle re-expands.
