@@ -50,6 +50,7 @@ void prompt_ui_init  (PromptUi* ui);
 //   HIDDEN    + new prompt id (not in last_decided_id) → EXPANDED
 //   EXPANDED  + snapshot drops prompt or !live         → HIDDEN
 //   EXPANDED  + new id (different from current_id)     → EXPANDED (replace)
+//   EXPANDED  + same id continues                      → EXPANDED (no-op)
 //   COLLAPSED + snapshot drops prompt or !live         → HIDDEN
 //   COLLAPSED + new id (different from current_id)     → EXPANDED (replace)
 //   COLLAPSED + same id continues                      → COLLAPSED

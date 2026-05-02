@@ -30,7 +30,7 @@ public:
 private:
     PromptUi&         ui_;
     bool              ever_drawn_;
-    bool              last_visible_;
+    bool              last_expanded_;
     PromptOption      last_highlight_;
     char              last_id_[40];
     bool              last_flashing_;
