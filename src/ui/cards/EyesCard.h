@@ -5,6 +5,7 @@
 #include "../Card.h"
 #include "../../core/AppState.h"
 #include "state.h"
+#include "prompt_ui.h"
 
 class Adafruit_ST7789;
 
@@ -13,7 +14,7 @@ class Adafruit_ST7789;
 // fields — they are the same data viewed from two angles.
 class EyesCard : public Card {
 public:
-    explicit EyesCard(const AppState& state);
+    EyesCard(const AppState& state, const PromptUi& prompt);
 
     void invalidate() override;
     bool isDirty() const override;
@@ -29,6 +30,7 @@ private:
     void drawRotatedSlit(Adafruit_ST7789& tft, int cx, int cy, int h, int sign);
 
     const AppState& state_;
+    const PromptUi& prompt_;
 
     // Animation state.
     BuddyState prev_state_;

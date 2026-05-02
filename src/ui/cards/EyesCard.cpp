@@ -77,8 +77,8 @@ const int      kDotsEraseH          = 7;
 
 }  // namespace
 
-EyesCard::EyesCard(const AppState& state)
-    : state_(state) {
+EyesCard::EyesCard(const AppState& state, const PromptUi& prompt)
+    : state_(state), prompt_(prompt) {
     resetAnim();
     frame_valid_   = false;
     last_state_    = static_cast<BuddyState>(0xFF);
