@@ -536,17 +536,26 @@ void EyesCard::drawFrame(Adafruit_ST7789& tft, BuddyState state, bool full_clear
         if (full_clear) {
             tft.fillScreen(ST77XX_BLACK);
         } else {
-            // Erase from screen top down past the worst-case glyph
-            // bottom. Eyes occupy y=22..66 (gaze-down). A size-4 ?-glyph
-            // can be born at slot_y_offset=+7, which puts its bottom row
-            // at y=67 — exactly one pixel below an erase that stopped at
-            // 66, leaving a 1-px ghost trail every frame. Extending the
-            // erase to y=74 (75 rows total) covers the worst-case glyph
-            // plus a few pixels of safety margin while still sitting well
-            // above the badge top at y=95.
-            const int erase_y = 0;
-            const int erase_h = 75;     // 0..74 inclusive
-            tft.fillRect(0, erase_y, 240, erase_h, ST77XX_BLACK);
+            // Three tight erase rects instead of one full-width strip.
+            // The full-width strip (240×75) wrote 36 KB of black per
+            // frame ≈ 7.5 ms over SPI, which is ~half the 16 ms frame
+            // budget — the entire upper half of the screen went black
+            // every frame, producing a visible strobe. Splitting into
+            // (left eye, question-marks centre, right eye) skips the
+            // empty 60-px gaps on either side of the centre column and
+            // drops the erase to ≈ 17 KB / 3.5 ms.
+            //
+            //   Left eye band  : x=29..60, y=21..67   (32 × 47 = 1504 px)
+            //   ?-cluster band : x=100..183, y=0..68   (84 × 69 = 5796 px)
+            //   Right eye band : x=179..210, y=21..67  (32 × 47 = 1504 px)
+            //
+            // ?-band bounds derived from worst-case glyph extents: cursor
+            // x ∈ [106, 158], glyph width ≤ ts*6 = 24 px, so right edge
+            // reaches 182; cursor y ∈ [13, 52] minus ts*4 = 16 → top -3,
+            // bottom 67. Padded a couple of pixels each way for safety.
+            tft.fillRect( 29, 21,  32, 47, ST77XX_BLACK);   // left eye
+            tft.fillRect(179, 21,  32, 47, ST77XX_BLACK);   // right eye
+            tft.fillRect(100,  0,  84, 69, ST77XX_BLACK);   // ?-cluster
         }
 
         // 1) Eyes
