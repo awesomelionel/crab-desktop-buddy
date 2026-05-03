@@ -46,10 +46,9 @@ private:
     int8_t     blink_i_;                  // -1 between blinks, else 0..N-1
     uint32_t   next_blink_ms_;
     uint32_t   blink_step_deadline_ms_;
-    int16_t    glance_x_;                 // IDLE side-glance x offset
-    uint32_t   next_glance_ms_;
-    uint32_t   glance_return_ms_;
-    bool       glance_swing_pending_;     // true after first half of a L↔R sweep
+    uint32_t   next_glance_ms_;           // when the next IDLE glance event may start
+    uint32_t   glance_event_start_ms_;    // 0 when no event is in flight
+    int8_t     glance_event_side_;        // ±1; first peak direction for the in-flight event
     uint32_t   scan_epoch_ms_;            // WORKING animation time origin
     uint8_t    draw_h_;
     int16_t    draw_dx_;

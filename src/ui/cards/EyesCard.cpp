@@ -29,14 +29,18 @@ const uint8_t kBlinkH[] = {30, 20, 10, 0, 10, 20, 30};
 const int     kBlinkN   = 7;
 
 // Idle-face timing knobs. Curious-and-alert feel: blink ~every 4.5 s with
-// snappier per-step animation, and dart eyes diagonally up-and-side every
-// 2.5–4.5 s with a short ~0.6 s hold before returning to centre.
-const uint32_t kBlinkIntervalMs = 4500;
-const uint32_t kBlinkStepMs     = 70;
-const uint32_t kGlanceMinMs     = 2500;
-const uint32_t kGlanceJitterMs  = 2000;
-const uint32_t kGlanceHoldMs    = 600;
-const int      kGlanceDy        = -10;  // negative = up; applied while glancing
+// snappier per-step animation, plus a slow eased side-to-side glance every
+// 2.5–4.5 s. Each glance event eases 0 → A, holds, eases A → -A across the
+// face, holds, eases back to 0 — no instant snaps, mirrors the WAITING
+// gaze cadence so both states feel like the same character.
+const uint32_t kBlinkIntervalMs    = 4500;
+const uint32_t kBlinkStepMs        = 70;
+const uint32_t kGlanceMinMs        = 2500;
+const uint32_t kGlanceJitterMs     = 2000;
+const int      kGlanceX            = 20;    // peak horizontal offset per side
+const int      kGlanceDy           = -10;   // peak vertical offset (up); scales with |draw_dx_|
+const uint32_t kGlanceEaseMs       = 700;   // cubic ease per hop; matches kWaitScanEaseMs
+const uint32_t kGlanceHoldEdgeMs   = 350;   // hold at A and at B before easing onward
 
 // ---- STATE_WORKING (focused-thinking redesign) ----
 // All times in ms; angles in radians.
@@ -145,10 +149,9 @@ void EyesCard::resetAnim() {
     blink_i_                 = -1;
     next_blink_ms_           = now + kBlinkIntervalMs;
     blink_step_deadline_ms_  = 0;
-    glance_x_                = 0;
     next_glance_ms_          = now + kGlanceMinMs + (esp_random() % kGlanceJitterMs);
-    glance_return_ms_        = 0;
-    glance_swing_pending_    = false;
+    glance_event_start_ms_   = 0;
+    glance_event_side_       = +1;
     scan_epoch_ms_           = now;
     draw_h_                  = 30;
     draw_dx_                 = 0;
@@ -201,14 +204,15 @@ void EyesCard::armState(BuddyState state, uint32_t now) {
             draw_wait_gaze_dy_   = 0;
             break;
         case STATE_IDLE:
-            blink_i_              = -1;
-            next_blink_ms_        = now + kBlinkIntervalMs;
-            glance_x_             = 0;
-            next_glance_ms_       = now + kGlanceMinMs + (esp_random() % kGlanceJitterMs);
-            glance_return_ms_     = 0;
-            glance_swing_pending_ = false;
+            blink_i_                = -1;
+            next_blink_ms_          = now + kBlinkIntervalMs;
+            next_glance_ms_         = now + kGlanceMinMs + (esp_random() % kGlanceJitterMs);
+            glance_event_start_ms_  = 0;
+            glance_event_side_      = +1;
+            draw_dx_                = 0;
+            draw_base_y_            = kBaseIdleY;
             for (auto& b : q_bubbles_) b.alive = false;
-            draw_wait_gaze_dy_   = 0;
+            draw_wait_gaze_dy_      = 0;
             break;
         case STATE_WORKING:
             scan_epoch_ms_              = now;
@@ -250,27 +254,58 @@ void EyesCard::tickBlink(uint32_t now) {
 }
 
 void EyesCard::tickGlanceIdle(uint32_t now) {
-    if (glance_x_ != 0) {
-        if (glance_return_ms_ != 0 && now >= glance_return_ms_) {
-            if (glance_swing_pending_) {
-                // Swing across to the opposite side for the second half of
-                // the sweep, so each curiosity event covers both directions.
-                glance_x_             = -glance_x_;
-                glance_swing_pending_ = false;
-                glance_return_ms_     = now + kGlanceHoldMs;
-            } else {
-                glance_x_         = 0;
-                glance_return_ms_ = 0;
-                next_glance_ms_   = now + kGlanceMinMs + (esp_random() % kGlanceJitterMs);
-            }
+    // No event in flight: count down to the next one.
+    if (glance_event_start_ms_ == 0) {
+        if ((int32_t)(now - next_glance_ms_) >= 0) {
+            glance_event_start_ms_ = now;
+            glance_event_side_     = (esp_random() & 1) ? +1 : -1;
         }
+        draw_dx_ = 0;
         return;
     }
-    if (now >= next_glance_ms_) {
-        glance_x_             = (esp_random() & 1) ? 20 : -20;
-        glance_swing_pending_ = true;
-        glance_return_ms_     = now + kGlanceHoldMs;
+
+    // Event in flight: piecewise eased motion through 5 phases.
+    //   t in [0,        E)            → ease 0 → A   (cubic ease-out)
+    //   t in [E,        E+H)          → hold A
+    //   t in [E+H,      E+H+E)        → ease A → B   (covers 2× the px)
+    //   t in [E+H+E,    E+H+E+H)      → hold B
+    //   t in [E+H+E+H,  E+H+E+H+E)    → ease B → 0
+    // Where A = +side·X, B = -side·X. Same per-hop ease duration as
+    // WAITING (700 ms) so the motion has the same calm character; the
+    // cross-side hop visibly moves faster because it covers 40 px in
+    // the same window — this reads as a confident sweep rather than a
+    // snap.
+    const uint32_t t  = now - glance_event_start_ms_;
+    const uint32_t E  = kGlanceEaseMs;
+    const uint32_t H  = kGlanceHoldEdgeMs;
+    const int      X  = kGlanceX;
+    const int      A  = (int)glance_event_side_ * X;
+    const int      B  = -A;
+
+    int dx;
+    if (t < E) {
+        const float k     = (float)t / (float)E;
+        const float eased = 1.0f - (1.0f - k) * (1.0f - k) * (1.0f - k);
+        dx = (int)((float)A * eased);
+    } else if (t < E + H) {
+        dx = A;
+    } else if (t < E + H + E) {
+        const float k     = (float)(t - E - H) / (float)E;
+        const float eased = 1.0f - (1.0f - k) * (1.0f - k) * (1.0f - k);
+        dx = A + (int)((float)(B - A) * eased);
+    } else if (t < E + H + E + H) {
+        dx = B;
+    } else if (t < E + H + E + H + E) {
+        const float k     = (float)(t - E - H - E - H) / (float)E;
+        const float eased = 1.0f - (1.0f - k) * (1.0f - k) * (1.0f - k);
+        dx = B + (int)((float)(0 - B) * eased);
+    } else {
+        // Event complete; queue the next one.
+        dx = 0;
+        glance_event_start_ms_ = 0;
+        next_glance_ms_        = now + kGlanceMinMs + (esp_random() % kGlanceJitterMs);
     }
+    draw_dx_ = (int16_t)dx;
 }
 
 void EyesCard::tickWaitGaze(uint32_t now) {
@@ -338,13 +373,16 @@ void EyesCard::tick(uint32_t now_ms) {
             disc_age_ms_ = now_ms - disc_anim_start_ms_;
             break;
 
-        case STATE_IDLE:
+        case STATE_IDLE: {
             tickBlink(now_ms);
-            tickGlanceIdle(now_ms);
-            draw_base_y_ = kBaseIdleY + (glance_x_ != 0 ? kGlanceDy : 0);
-            draw_dx_     = glance_x_;
+            tickGlanceIdle(now_ms);   // sets draw_dx_
+            // y offset eases proportionally with |dx|: looking up at the
+            // peaks (-10 px) and flat at centre. kGlanceDy is negative.
+            const int abs_dx = (draw_dx_ < 0) ? -draw_dx_ : draw_dx_;
+            draw_base_y_ = (int16_t)(kBaseIdleY + (kGlanceDy * abs_dx) / kGlanceX);
             draw_h_      = (blink_i_ >= 0) ? kBlinkH[blink_i_] : 30;
             break;
+        }
 
         case STATE_WORKING: {
             const uint32_t t = now_ms - scan_epoch_ms_;
@@ -430,7 +468,8 @@ void EyesCard::render(Display& display) {
     // Per CLAUDE.md: incremental DISCONNECTED frames must use a partial erase
     // to avoid the ~13 ms full-screen flash that causes flicker at 62 fps.
     bool full_clear = stateJustChanged ||
-                      (bs != STATE_DISCONNECTED && bs != STATE_WORKING && bs != STATE_WAITING);
+                      (bs != STATE_DISCONNECTED && bs != STATE_WORKING &&
+                       bs != STATE_WAITING && bs != STATE_IDLE);
     drawFrame(display.tft(), bs, full_clear);
 
     last_state_    = bs;
@@ -647,11 +686,40 @@ void EyesCard::drawFrame(Adafruit_ST7789& tft, BuddyState state, bool full_clear
         return;
     }
 
-    tft.fillScreen(ST77XX_BLACK);
+    if (state == STATE_IDLE) {
+        // Per CLAUDE.md: never fillScreen in a continuous animation.
+        // The new eased glance updates draw_dx_ every frame for ~700 ms
+        // per hop, so a fillScreen each frame would strobe. Use two
+        // tight bbox rects (worst case across all gaze positions and
+        // open eye height) instead.
+        //
+        //   Left eye bbox  : x=10..79,  y=40..83  (70 × 44 = 3080 px)
+        //   Right eye bbox : x=160..229, y=40..83  (70 × 44 = 3080 px)
+        //
+        // x bbox accounts for kGlanceX (±20) drift each side; y bbox
+        // accounts for kGlanceDy (-10) lift plus the +15 vertical
+        // centering offset and h up to 30.
+        if (full_clear) {
+            tft.fillScreen(ST77XX_BLACK);
+        } else {
+            tft.fillRect( 10, 40, 70, 44, ST77XX_BLACK);   // left eye bbox
+            tft.fillRect(160, 40, 70, 44, ST77XX_BLACK);   // right eye bbox
+        }
 
+        int h = draw_h_;
+        if (h <= 0) return;
+        int16_t top = (int16_t)(draw_base_y_ + 15 - h / 2);
+        tft.fillRect(kLeftX  + draw_dx_, top, kEyeW, h, ST77XX_WHITE);
+        tft.fillRect(kRightX + draw_dx_, top, kEyeW, h, ST77XX_WHITE);
+        return;
+    }
+
+    // Catch-all fallback for any future state that doesn't have its own
+    // branch above. Full-clear is fine here because we won't be running
+    // a continuous animation.
+    tft.fillScreen(ST77XX_BLACK);
     int h = draw_h_;
     if (h <= 0) return;
-
     int16_t top = (int16_t)(draw_base_y_ + 15 - h / 2);
     tft.fillRect(kLeftX  + draw_dx_, top, kEyeW, h, ST77XX_WHITE);
     tft.fillRect(kRightX + draw_dx_, top, kEyeW, h, ST77XX_WHITE);
