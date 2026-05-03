@@ -116,6 +116,43 @@ const int      kBadgeBottomGap = 4;
 // kFooterH = 18 from src/ui/Footer.h
 const int      kBadgeY       = 135 - 18 - kBadgeBottomGap - kBadgeH;  // 95
 
+// Fill the strips of rect A that are NOT inside rect B with the given
+// colour. Used for tearing-free differential updates: pass (OLD, NEW,
+// BLACK) to erase pixels that were in the previous frame but aren't
+// now, then (NEW, OLD, WHITE) to paint pixels that should appear this
+// frame. Pixels in (A ∩ B) are never touched, so the LCD scanline
+// can't catch them mid-transition through black.
+inline int imin(int a, int b) { return a < b ? a : b; }
+inline int imax(int a, int b) { return a > b ? a : b; }
+
+void drawRectsAMinusB(Adafruit_ST7789& tft,
+                      int ax, int ay, int aw, int ah,
+                      int bx, int by, int bw, int bh,
+                      uint16_t color) {
+    if (aw <= 0 || ah <= 0) return;
+    const int ix1 = imax(ax, bx);
+    const int iy1 = imax(ay, by);
+    const int ix2 = imin(ax + aw, bx + bw);
+    const int iy2 = imin(ay + ah, by + bh);
+    if (ix1 >= ix2 || iy1 >= iy2) {
+        // No intersection — A is entirely outside B.
+        tft.fillRect(ax, ay, aw, ah, color);
+        return;
+    }
+    if (ay < iy1) {
+        tft.fillRect(ax, ay, aw, iy1 - ay, color);                  // top strip
+    }
+    if (ay + ah > iy2) {
+        tft.fillRect(ax, iy2, aw, (ay + ah) - iy2, color);          // bottom strip
+    }
+    if (ax < ix1) {
+        tft.fillRect(ax, iy1, ix1 - ax, iy2 - iy1, color);          // left strip
+    }
+    if (ax + aw > ix2) {
+        tft.fillRect(ix2, iy1, (ax + aw) - ix2, iy2 - iy1, color);  // right strip
+    }
+}
+
 }  // namespace
 
 EyesCard::EyesCard(const AppState& state, PromptUi& prompt)
@@ -687,30 +724,44 @@ void EyesCard::drawFrame(Adafruit_ST7789& tft, BuddyState state, bool full_clear
     }
 
     if (state == STATE_IDLE) {
-        // Per CLAUDE.md: never fillScreen in a continuous animation.
-        // The new eased glance updates draw_dx_ every frame for ~700 ms
-        // per hop, so a fillScreen each frame would strobe. Use two
-        // tight bbox rects (worst case across all gaze positions and
-        // open eye height) instead.
-        //
-        //   Left eye bbox  : x=10..79,  y=40..83  (70 × 44 = 3080 px)
-        //   Right eye bbox : x=160..229, y=40..83  (70 × 44 = 3080 px)
-        //
-        // x bbox accounts for kGlanceX (±20) drift each side; y bbox
-        // accounts for kGlanceDy (-10) lift plus the +15 vertical
-        // centering offset and h up to 30.
+        // Differential update against last_*. Pixels in the (old ∩ new)
+        // overlap are never written, so they can't tear through black
+        // — the previous bbox-erase-then-redraw approach briefly
+        // blacked out ~28×30 px of the eye every frame and the LCD
+        // scanline could catch a half-finished frame. Now we only
+        // touch the small slivers that actually changed.
         if (full_clear) {
             tft.fillScreen(ST77XX_BLACK);
-        } else {
-            tft.fillRect( 10, 40, 70, 44, ST77XX_BLACK);   // left eye bbox
-            tft.fillRect(160, 40, 70, 44, ST77XX_BLACK);   // right eye bbox
+            if (draw_h_ > 0) {
+                const int new_top = draw_base_y_ + 15 - draw_h_ / 2;
+                tft.fillRect(kLeftX  + draw_dx_, new_top, kEyeW, draw_h_, ST77XX_WHITE);
+                tft.fillRect(kRightX + draw_dx_, new_top, kEyeW, draw_h_, ST77XX_WHITE);
+            }
+            return;
         }
 
-        int h = draw_h_;
-        if (h <= 0) return;
-        int16_t top = (int16_t)(draw_base_y_ + 15 - h / 2);
-        tft.fillRect(kLeftX  + draw_dx_, top, kEyeW, h, ST77XX_WHITE);
-        tft.fillRect(kRightX + draw_dx_, top, kEyeW, h, ST77XX_WHITE);
+        const int new_top = draw_base_y_ + 15 - draw_h_ / 2;
+        const int old_top = last_base_y_ + 15 - last_h_  / 2;
+
+        // Left eye: erase OLD-NEW (going to black), draw NEW-OLD (going to white).
+        drawRectsAMinusB(tft,
+                         kLeftX + last_dx_, old_top, kEyeW, last_h_,
+                         kLeftX + draw_dx_, new_top, kEyeW, draw_h_,
+                         ST77XX_BLACK);
+        drawRectsAMinusB(tft,
+                         kLeftX + draw_dx_, new_top, kEyeW, draw_h_,
+                         kLeftX + last_dx_, old_top, kEyeW, last_h_,
+                         ST77XX_WHITE);
+
+        // Right eye: same.
+        drawRectsAMinusB(tft,
+                         kRightX + last_dx_, old_top, kEyeW, last_h_,
+                         kRightX + draw_dx_, new_top, kEyeW, draw_h_,
+                         ST77XX_BLACK);
+        drawRectsAMinusB(tft,
+                         kRightX + draw_dx_, new_top, kEyeW, draw_h_,
+                         kRightX + last_dx_, old_top, kEyeW, last_h_,
+                         ST77XX_WHITE);
         return;
     }
 
