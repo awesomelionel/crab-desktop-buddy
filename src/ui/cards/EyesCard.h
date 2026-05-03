@@ -91,6 +91,12 @@ private:
     bool       last_badge_visible_;
     char       footer_device_[20];
     bool       footer_live_;
+    // Mirrors of the last-rendered footer content so the WAITING render
+    // only redraws when something actually changed. Without these the
+    // footer band repainted every frame in COLLAPSED mode and flickered.
+    char       last_footer_device_[20];
+    bool       last_footer_live_;
+    bool       last_footer_drawn_;     // false until the footer first appears
 
     // Off-screen canvas for the WORKING eye render. Each eye is composed
     // here in RAM (54×21 px = 2.3 KB) then pushed to the LCD as one

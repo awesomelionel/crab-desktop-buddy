@@ -171,8 +171,11 @@ EyesCard::EyesCard(const AppState& state, PromptUi& prompt)
     last_badge_visible_  = false;
     footer_device_[0]    = 0;
     footer_live_         = false;
-    work_canvas_         = nullptr;
-    wait_q_canvas_       = nullptr;
+    last_footer_device_[0] = 0;
+    last_footer_live_      = false;
+    last_footer_drawn_     = false;
+    work_canvas_           = nullptr;
+    wait_q_canvas_         = nullptr;
 }
 
 void EyesCard::invalidate() {
@@ -766,10 +769,30 @@ void EyesCard::drawFrame(Adafruit_ST7789& tft, BuddyState state, bool full_clear
             }
         }
 
-        // 4) Footer — drawn on full_clear or when the badge appears.
-        if (full_clear || prompt_.mode == PROMPT_UI_COLLAPSED) {
-            tft.fillRect(0, ui::kFooterTopY, 240, ui::kFooterH, ST77XX_BLACK);
-            ui::drawFooter(tft, footer_device_, footer_live_);
+        // 4) Footer — only redraw when its content actually changed
+        // (live flag flipped, device name changed) or on first
+        // appearance after a full_clear / state entry. Previously this
+        // unconditionally repainted every frame in COLLAPSED mode,
+        // strobing the LIVE pill and device label.
+        if (prompt_.mode == PROMPT_UI_COLLAPSED) {
+            const bool footer_dirty = full_clear ||
+                                      !last_footer_drawn_ ||
+                                      (last_footer_live_ != footer_live_) ||
+                                      strncmp(last_footer_device_, footer_device_,
+                                              sizeof(last_footer_device_)) != 0;
+            if (footer_dirty) {
+                tft.fillRect(0, ui::kFooterTopY, 240, ui::kFooterH, ST77XX_BLACK);
+                ui::drawFooter(tft, footer_device_, footer_live_);
+                last_footer_live_ = footer_live_;
+                strncpy(last_footer_device_, footer_device_,
+                        sizeof(last_footer_device_) - 1);
+                last_footer_device_[sizeof(last_footer_device_) - 1] = 0;
+                last_footer_drawn_ = true;
+            }
+        } else {
+            // EXPANDED is hidden behind the overlay; HIDDEN doesn't
+            // own this footer. Either way, our copy is stale.
+            last_footer_drawn_ = false;
         }
         return;
     }
