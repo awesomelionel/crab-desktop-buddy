@@ -530,60 +530,84 @@ void EyesCard::drawFrame(Adafruit_ST7789& tft, BuddyState state, bool full_clear
             return;
         }
 
-        // Per CLAUDE.md: never fillScreen during a continuous animation.
-        // State entry does one full clear; subsequent frames erase only
-        // the (eyes ∪ question-mark) region.
+        // Per-region dirty checks. Each region only erases + redraws
+        // when its inputs actually changed, so during gaze-hold phases
+        // (75 % of every 2 s scan cycle) the eye band is left alone and
+        // the user sees solid white eyes instead of a strobe.
+        //
+        //   Eye band     : redraws when gaze_dy or eye height changed.
+        //   ?-cluster    : redraws every frame any bubble is alive (the
+        //                  bubbles themselves animate every tick).
+        //   Badge        : already gated by last_badge_visible_ below.
+        //
+        // Layout used by the erase rects (no overlap with the badge or
+        // each other; 1-px gap between right eye and ?-band):
+        //
+        //   Left eye     : x=29..60,   y=21..67   (32 × 47 = 1504 px)
+        //   ?-cluster    : x=100..177, y=0..68    (78 × 69 = 5382 px)
+        //   Right eye    : x=179..210, y=21..67   (32 × 47 = 1504 px)
+        //
+        // ?-band bounds derived from worst-case visible glyph extents:
+        // cursor x ∈ [106, 158], glyph width ≤ ts*6 = 24, so right edge
+        // reaches 182. The 158→182 tail only fires at t≈1 when alpha is
+        // ~0 (invisible) so we shrink the erase to x≤177 to keep clear
+        // of the right eye and let the invisible tail composite on
+        // black. Cursor y ∈ [13, 52] minus ts*4 = 16 → top −3, bottom
+        // 67; padded a couple of pixels each way.
+        const bool eyes_dirty = full_clear ||
+                                (last_wait_gaze_dy_ != draw_wait_gaze_dy_) ||
+                                (last_h_            != draw_h_);
+        bool q_dirty = full_clear;
+        if (!q_dirty) {
+            for (const auto& b : q_bubbles_) {
+                if (b.alive) { q_dirty = true; break; }
+            }
+        }
+
         if (full_clear) {
             tft.fillScreen(ST77XX_BLACK);
-        } else {
-            // Three tight erase rects instead of one full-width strip.
-            // The full-width strip (240×75) wrote 36 KB of black per
-            // frame ≈ 7.5 ms over SPI, which is ~half the 16 ms frame
-            // budget — the entire upper half of the screen went black
-            // every frame, producing a visible strobe. Splitting into
-            // (left eye, question-marks centre, right eye) skips the
-            // empty 60-px gaps on either side of the centre column and
-            // drops the erase to ≈ 17 KB / 3.5 ms.
-            //
-            //   Left eye band  : x=29..60, y=21..67   (32 × 47 = 1504 px)
-            //   ?-cluster band : x=100..183, y=0..68   (84 × 69 = 5796 px)
-            //   Right eye band : x=179..210, y=21..67  (32 × 47 = 1504 px)
-            //
-            // ?-band bounds derived from worst-case glyph extents: cursor
-            // x ∈ [106, 158], glyph width ≤ ts*6 = 24 px, so right edge
-            // reaches 182; cursor y ∈ [13, 52] minus ts*4 = 16 → top -3,
-            // bottom 67. Padded a couple of pixels each way for safety.
-            tft.fillRect( 29, 21,  32, 47, ST77XX_BLACK);   // left eye
-            tft.fillRect(179, 21,  32, 47, ST77XX_BLACK);   // right eye
-            tft.fillRect(100,  0,  84, 69, ST77XX_BLACK);   // ?-cluster
         }
 
-        // 1) Eyes
-        int h = draw_h_;
-        if (h > 0) {
-            int16_t top = (int16_t)(kBaseWaitYNew + draw_wait_gaze_dy_ + 15 - h / 2);
-            tft.fillRect(kLeftX,  top, kEyeW, h, ST77XX_WHITE);
-            tft.fillRect(kRightX, top, kEyeW, h, ST77XX_WHITE);
+        // 1) Eyes — erase + redraw only when their geometry changed.
+        if (eyes_dirty) {
+            if (!full_clear) {
+                tft.fillRect( 29, 21, 32, 47, ST77XX_BLACK);
+                tft.fillRect(179, 21, 32, 47, ST77XX_BLACK);
+            }
+            int h = draw_h_;
+            if (h > 0) {
+                int16_t top = (int16_t)(kBaseWaitYNew + draw_wait_gaze_dy_ + 15 - h / 2);
+                tft.fillRect(kLeftX,  top, kEyeW, h, ST77XX_WHITE);
+                tft.fillRect(kRightX, top, kEyeW, h, ST77XX_WHITE);
+            }
         }
 
-        // 2) Question marks (drawn after eyes so they composite on top)
-        const uint32_t now = millis();
-        tft.setTextColor(kQColor, ST77XX_BLACK);
-        for (const auto& b : q_bubbles_) {
-            if (!b.alive) continue;
-            const uint32_t age = now - b.born_ms;
-            if ((int32_t)age < 0) continue;       // staggered, not yet born
-            if (age > kQLifetimeMs) continue;
-            const float t    = (float)age / (float)kQLifetimeMs;
-            const float ease = 1.0f - (1.0f - t) * (1.0f - t);   // quadratic ease-out
-            const int   y    = kQAnchorY - (int)((float)kQRiseY * ease) + b.slot_y_offset;
-            const int   x    = kQAnchorX + b.slot_x_offset + (int)((float)kQDriftX * ease);
-            // GFX text size 1 = 6×8 px; the design wants 14 / 28 px, so
-            // textSize 2 ≈ 14 px and textSize 4 ≈ 28 px.
-            const uint8_t ts = (b.size >= 24) ? 4 : 2;
-            tft.setTextSize(ts);
-            tft.setCursor(x, y - ts * 4);          // baseline-ish nudge
-            tft.print('?');
+        // 2) Question marks — erase + redraw the centre band any frame
+        // a bubble is live. The glyphs are drawn via GFX text rendering
+        // which is the most expensive call in this state (~2 ms per
+        // size-4 glyph), so this branch dominates the per-frame cost.
+        if (q_dirty) {
+            if (!full_clear) {
+                tft.fillRect(100, 0, 78, 69, ST77XX_BLACK);
+            }
+            const uint32_t now = millis();
+            tft.setTextColor(kQColor, ST77XX_BLACK);
+            for (const auto& b : q_bubbles_) {
+                if (!b.alive) continue;
+                const uint32_t age = now - b.born_ms;
+                if ((int32_t)age < 0) continue;     // staggered, not yet born
+                if (age > kQLifetimeMs) continue;
+                const float t    = (float)age / (float)kQLifetimeMs;
+                const float ease = 1.0f - (1.0f - t) * (1.0f - t);   // quadratic ease-out
+                const int   y    = kQAnchorY - (int)((float)kQRiseY * ease) + b.slot_y_offset;
+                const int   x    = kQAnchorX + b.slot_x_offset + (int)((float)kQDriftX * ease);
+                // GFX text size 1 = 6×8 px; the design wants 14 / 28 px, so
+                // textSize 2 ≈ 14 px and textSize 4 ≈ 28 px.
+                const uint8_t ts = (b.size >= 24) ? 4 : 2;
+                tft.setTextSize(ts);
+                tft.setCursor(x, y - ts * 4);          // baseline-ish nudge
+                tft.print('?');
+            }
         }
 
         // 3) Badge (only if COLLAPSED — when EXPANDED, the overlay covers
