@@ -23,20 +23,22 @@ demoted to a small persistent badge so it doesn't hide the eyes.
    live but rendered as a slim ~18 px-tall pill above the existing footer.
    The eyes carousel card draws full-screen behind it.
 
-2. **First prompt for a new id auto-expands (today's behavior preserved).**
-   When a never-seen prompt id arrives, the full-screen `PromptCard` overlay
-   appears immediately. The user picks Approve / Deny / Dismiss as today.
+2. **New prompts arrive COLLAPSED.** The animated face stays on screen and
+   the badge appears at the bottom — the user opts into the Approve / Deny
+   / Dismiss UI explicitly with a center press. Replaces the earlier draft
+   that auto-expanded on first arrival.
 
-3. **Dismiss collapses to badge instead of hiding.** Dismiss removes the
-   full-screen overlay but the prompt is still pending — so the badge appears
-   at the bottom of the eyes card. It stays for the lifetime of that prompt
-   id (until snapshot drops `prompt`, the link goes OFFLINE, or the user
+3. **Dismiss collapses back to badge.** Dismiss removes the full-screen
+   overlay but the prompt is still pending — so the badge reappears at the
+   bottom of the eyes card. It stays for the lifetime of that prompt id
+   (until snapshot drops `prompt`, the link goes OFFLINE, or the user
    re-expands and decides). There is no way to fully hide the badge while
    the prompt is still pending.
 
-4. **Center press on the badge re-expands to the full prompt UI.** While
-   only the badge is visible, D1 (center) re-shows the full-screen overlay.
-   Up/Down do nothing. Other buttons do nothing.
+4. **Center press on the badge expands to the full prompt UI.** D1 (center)
+   shows the full-screen overlay (Approve / Deny / Dismiss). Up/Down on the
+   badge do nothing. Same press model whether COLLAPSED came from initial
+   arrival or from a prior Dismiss.
 
 5. **WAITING eyes get a new animation.** Eyes scan between forward gaze and
    a down-glance toward the badge, on a slow ~2 s oscillation. A cluster of
@@ -52,10 +54,11 @@ demoted to a small persistent badge so it doesn't hide the eyes.
 ### Three prompt UI modes
 
 ```
-HIDDEN     ── snapshot has prompt with id Y not in last_decided_id ──▶ EXPANDED
+HIDDEN     ── snapshot has prompt with id Y not in last_decided_id ──▶ COLLAPSED
+COLLAPSED  ── user presses Center ────────────────────────────────▶ EXPANDED
+COLLAPSED  ── snapshot has different new prompt id ───────────────▶ COLLAPSED (replace)
 EXPANDED   ── user presses Approve / Deny ────────────────────────▶ HIDDEN (id added to last_decided_id)
 EXPANDED   ── user presses Dismiss ───────────────────────────────▶ COLLAPSED
-COLLAPSED  ── user presses Center ────────────────────────────────▶ EXPANDED
 COLLAPSED  ── snapshot drops prompt or link goes OFFLINE ─────────▶ HIDDEN
 EXPANDED   ── snapshot drops prompt or link goes OFFLINE ─────────▶ HIDDEN
 ```
@@ -342,13 +345,13 @@ struct PromptView {
 |--------------|----------------------|--------------------|-------------|
 | HIDDEN       | no                   | —                  | HIDDEN      |
 | HIDDEN       | yes                  | id ∈ last_decided  | HIDDEN      |
-| HIDDEN       | yes                  | new id             | EXPANDED    |
+| HIDDEN       | yes                  | new id             | COLLAPSED   |
 | EXPANDED     | no  *or* not live    | —                  | HIDDEN      |
 | EXPANDED     | yes                  | same as current_id | EXPANDED    |
-| EXPANDED     | yes                  | different id       | EXPANDED (replace) |
+| EXPANDED     | yes                  | different id       | COLLAPSED (replace) |
 | COLLAPSED    | no  *or* not live    | —                  | HIDDEN      |
 | COLLAPSED    | yes                  | same as current_id | COLLAPSED   |
-| COLLAPSED    | yes                  | different id       | EXPANDED (new prompt re-expands) |
+| COLLAPSED    | yes                  | different id       | COLLAPSED (replace) |
 
 ### `EyesCard.h` / `EyesCard.cpp`
 
@@ -395,9 +398,9 @@ Today: when `prompt_ui.visible` flips on, push `PromptCard` overlay; off
 
 | Transition                   | Action                                  |
 |------------------------------|-----------------------------------------|
-| → EXPANDED                   | Push `PromptCard` overlay               |
-| EXPANDED → COLLAPSED         | Pop overlay (eyes card now visible)     |
-| COLLAPSED → EXPANDED         | Push `PromptCard` overlay again         |
+| → COLLAPSED                  | Pop overlay (eyes card now visible) — new prompts land here |
+| COLLAPSED → EXPANDED         | Push `PromptCard` overlay               |
+| EXPANDED → COLLAPSED         | Pop overlay (after Dismiss)             |
 | → HIDDEN                     | Pop overlay (if present)                |
 
 Button events: today, when prompt is visible, all button events go to
@@ -439,7 +442,8 @@ Host tests (`pio test -e native`) — extend `test_prompt_ui` (or add it
 if absent) with:
 
 - New mode is HIDDEN on init.
-- New prompt id → EXPANDED.
+- New prompt id → COLLAPSED.
+- COLLAPSED + Center on arrival → EXPANDED, highlight = OPT_APPROVE.
 - EXPANDED + Center on Dismiss → COLLAPSED, NOT in `last_decided_id`.
 - EXPANDED + Center on Approve → HIDDEN, id added to `last_decided_id`,
   outgoing decision queued.

@@ -47,13 +47,17 @@ void prompt_ui_init  (PromptUi* ui);
 // Reconcile UI state against an incoming snapshot.
 //
 // Mode transitions:
-//   HIDDEN    + new prompt id (not in last_decided_id) → EXPANDED
+//   HIDDEN    + new prompt id (not in last_decided_id) → COLLAPSED
 //   EXPANDED  + snapshot drops prompt or !live         → HIDDEN
-//   EXPANDED  + new id (different from current_id)     → EXPANDED (replace)
+//   EXPANDED  + new id (different from current_id)     → COLLAPSED (replace)
 //   EXPANDED  + same id continues                      → EXPANDED (no-op)
 //   COLLAPSED + snapshot drops prompt or !live         → HIDDEN
-//   COLLAPSED + new id (different from current_id)     → EXPANDED (replace)
+//   COLLAPSED + new id (different from current_id)     → COLLAPSED (replace)
 //   COLLAPSED + same id continues                      → COLLAPSED
+//
+// New prompts always arrive COLLAPSED so the eyes card stays visible;
+// the user opts into the Approve/Deny/Dismiss UI with a center press
+// on the badge.
 //
 // Also fires the flash → hide transition once the deadline elapses
 // (Approve / Deny only — Dismiss has no flash-then-hide path now;

@@ -18,7 +18,11 @@ static void hide(PromptUi* ui) {
 }
 
 static void show(PromptUi* ui, const ClaudePrompt& p) {
-    ui->mode = PROMPT_UI_EXPANDED;
+    // New prompts arrive COLLAPSED so the animated face stays on screen
+    // and the user opts into the Approve/Deny/Dismiss UI with a center
+    // press on the badge. Approve/Deny still flash + hide and remain
+    // sticky via last_decided_id.
+    ui->mode = PROMPT_UI_COLLAPSED;
     strncpy(ui->current_id, p.id,   sizeof(ui->current_id) - 1);
     ui->current_id[sizeof(ui->current_id) - 1] = 0;
     strncpy(ui->tool,       p.tool, sizeof(ui->tool) - 1);
