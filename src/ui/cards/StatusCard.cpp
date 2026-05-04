@@ -4,6 +4,7 @@
 
 #include "../../display/Display.h"
 #include "../Footer.h"
+#include "format.h"
 
 StatusCard::StatusCard(const AppState& state)
     : state_(state),
@@ -32,6 +33,7 @@ bool StatusCard::isDirty() const {
     if (state_.buddyState() != last_drawn_state_) return true;
     if (strncmp(last_drawn_msg_, state_.status().msg, sizeof(last_drawn_msg_)) != 0) return true;
     if (state_.isLive(millis()) != last_drawn_live_) return true;
+    if (state_.status().tokens_today != last_drawn_tokens_today_) return true;
     return false;
 }
 
@@ -57,7 +59,23 @@ void StatusCard::render(Display& display) {
     tft.printf("total %u  run %u  wait %u",
                status.total, status.running, status.waiting);
 
-    // Token line slot (y=70) — implemented in the next task.
+    // Daily token count line (size 2, white, centred). Hidden until at
+    // least one snapshot has arrived so we don't show "0 tokens today"
+    // before any data has landed.
+    if (status.valid) {
+        char tok_buf[kFormatTokenCountBufLen];
+        format_token_count(status.tokens_today, tok_buf, sizeof(tok_buf));
+        char tok_line[32];
+        snprintf(tok_line, sizeof(tok_line), "%s tokens today", tok_buf);
+
+        tft.setTextSize(2);
+        tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+        int16_t tx1, ty1; uint16_t ttw, tth;
+        tft.getTextBounds(tok_line, 0, 0, &tx1, &ty1, &ttw, &tth);
+        tft.setCursor((display.width() - (int)ttw) / 2, 70);
+        tft.print(tok_line);
+        tft.setTextSize(1);  // restore for the message block below
+    }
 
     tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
     if (status.msg[0]) {
