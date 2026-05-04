@@ -16,6 +16,7 @@ struct ClaudeStatus {
     char         msg[32];
     bool         valid;        // true once at least one snapshot has parsed
     ClaudePrompt prompt;
+    uint32_t     tokens_today; // output tokens since local midnight (from bridge)
 };
 
 // Parse one newline-stripped JSON object from the bridge into `out`.

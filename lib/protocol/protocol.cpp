@@ -34,6 +34,11 @@ bool protocol_parse_line(const char* line, ClaudeStatus* out) {
     out->running = doc["running"] | out->running;
     out->waiting = doc["waiting"] | out->waiting;
 
+    if (doc["tokens_today"].is<uint32_t>()) {
+        out->tokens_today = doc["tokens_today"].as<uint32_t>();
+    }
+    // else: leave previous value unchanged (matches partial-update semantics)
+
     const char* m = doc["msg"];
     if (m) {
         strncpy(out->msg, m, sizeof(out->msg) - 1);

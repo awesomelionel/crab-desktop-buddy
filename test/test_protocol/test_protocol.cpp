@@ -125,6 +125,42 @@ static void test_parse_prompt_hint_sanitizes_unprintable(void) {
     TEST_ASSERT_EQUAL_STRING("a?b?c", s.prompt.hint);
 }
 
+static void test_parse_tokens_today_present(void) {
+    ClaudeStatus s = {};
+    bool ok = protocol_parse_line(
+        "{\"total\":3,\"running\":1,\"waiting\":2,\"tokens_today\":31200}", &s);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL_UINT32(31200u, s.tokens_today);
+}
+
+static void test_parse_tokens_today_missing_keeps_previous(void) {
+    ClaudeStatus s = {};
+    s.tokens_today = 12345;
+    bool ok = protocol_parse_line("{\"running\":1}", &s);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL_UINT32(12345u, s.tokens_today);
+}
+
+static void test_parse_tokens_today_zero_is_honoured(void) {
+    // After local midnight, the bridge can legitimately send 0 to reset
+    // the counter — distinct from the field being absent.
+    ClaudeStatus s = {};
+    s.tokens_today = 99999;
+    bool ok = protocol_parse_line(
+        "{\"total\":0,\"tokens_today\":0}", &s);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL_UINT32(0u, s.tokens_today);
+}
+
+static void test_parse_tokens_today_malformed_keeps_previous(void) {
+    ClaudeStatus s = {};
+    s.tokens_today = 7777;
+    bool ok = protocol_parse_line(
+        "{\"running\":1,\"tokens_today\":\"not-a-number\"}", &s);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL_UINT32(7777u, s.tokens_today);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_parse_full_snapshot);
@@ -139,5 +175,9 @@ int main(int, char**) {
     RUN_TEST(test_parse_prompt_id_too_long_drops);
     RUN_TEST(test_parse_prompt_real_id_fits);
     RUN_TEST(test_parse_prompt_hint_sanitizes_unprintable);
+    RUN_TEST(test_parse_tokens_today_present);
+    RUN_TEST(test_parse_tokens_today_missing_keeps_previous);
+    RUN_TEST(test_parse_tokens_today_zero_is_honoured);
+    RUN_TEST(test_parse_tokens_today_malformed_keeps_previous);
     return UNITY_END();
 }
