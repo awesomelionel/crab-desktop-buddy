@@ -36,6 +36,12 @@ public:
                     uint8_t boot_card_id,
                     char* err, size_t err_len);
 
+    // Applies a backlight-section update.
+    bool applyBacklight(uint16_t dim_timeout_s,
+                        uint8_t  dim_level_pct,
+                        uint8_t  full_level_pct,
+                        char* err, size_t err_len);
+
     // Wipe NVS settings namespace and reset to defaults seeded with
     // default_name. Wi-Fi creds (in a separate namespace) are untouched.
     void clearToDefaults(const char* default_name);

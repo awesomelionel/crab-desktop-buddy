@@ -64,6 +64,21 @@ bool Settings::applyCards(uint8_t enabled_mask,
     return true;
 }
 
+bool Settings::applyBacklight(uint16_t dim_timeout_s,
+                              uint8_t  dim_level_pct,
+                              uint8_t  full_level_pct,
+                              char* err, size_t err_len) {
+    settings::Settings next = data_;
+    if (!settings::applyBacklightFields(next, dim_timeout_s, dim_level_pct,
+                                        full_level_pct, err, err_len)) {
+        return false;
+    }
+    data_ = next;
+    persist();
+    if (bus_) bus_->publish(EventKind::SettingsChanged);
+    return true;
+}
+
 void Settings::clearToDefaults(const char* default_name) {
     Preferences p;
     if (p.begin(NS, /*readOnly=*/false)) {
