@@ -584,10 +584,49 @@ void EyesCard::drawDoneFrame(Adafruit_ST7789& tft, uint32_t t) {
 
     draw_eye(done_canvas_l_, kDoneCanvasLeftX);
     draw_eye(done_canvas_r_, kDoneCanvasRightX);
+
+    // Sparkle: 4-point cross at (kDoneSparkleCx, kDoneSparkleCy). Erase the
+    // entire bbox first (cheap — ~17×17 px), then draw n pixels (0..5):
+    //   center always drawn first when n >= 1
+    //   then ±x satellites at n >= 2 (right) and n >= 3 (left)
+    //   then ±y satellites at n >= 4 (up) and n >= 5 (down)
+    // Outer-first fade as brightness drops keeps the visual centroid steady.
+    tft.fillRect(kDoneSparkleBboxX, kDoneSparkleBboxY,
+                 kDoneSparkleBboxW, kDoneSparkleBboxH, ST77XX_BLACK);
+    const uint8_t n = doneSparkleCount(t);
+    if (n >= 5) tft.fillRect(kDoneSparkleCx, kDoneSparkleCy + kDoneSparkleArm, 1, 1, ST77XX_WHITE);
+    if (n >= 4) tft.fillRect(kDoneSparkleCx, kDoneSparkleCy - kDoneSparkleArm, 1, 1, ST77XX_WHITE);
+    if (n >= 3) tft.fillRect(kDoneSparkleCx - kDoneSparkleArm, kDoneSparkleCy, 1, 1, ST77XX_WHITE);
+    if (n >= 2) tft.fillRect(kDoneSparkleCx + kDoneSparkleArm, kDoneSparkleCy, 1, 1, ST77XX_WHITE);
+    if (n >= 1) tft.fillRect(kDoneSparkleCx, kDoneSparkleCy, 1, 1, ST77XX_WHITE);
 }
 
-uint8_t EyesCard::doneSparkleCount(uint32_t /*t*/) const {
-    return 0;  // implemented in Task 6
+uint8_t EyesCard::doneSparkleCount(uint32_t t) const {
+    // Brightness shape:
+    //   phase 1 (0..100):       0.0 -> 0.5 (linear)
+    //   phase 2 (100..200):     0.5 -> 1.0 (linear)
+    //   phase 3 (200..350):     1.0 (hold)
+    //   phase 4 (350..1100):    1.0 -> 0.0 (linear over 750 ms)
+    //   phase 5 (1100..):       0.0
+    // Quantized to 0..5 visible pixels (5 = full bright cross, 0 = hidden).
+    // The 5 pixels fade out outer-first, leaving the center until last.
+    float b;
+    if (t < kDonePhase1End) {
+        b = 0.5f * ((float)t / (float)kDoneBounceUpMs);
+    } else if (t < kDonePhase2End) {
+        b = 0.5f + 0.5f * ((float)(t - kDonePhase1End) / (float)kDoneSettleLowMs);
+    } else if (t < kDonePhase3End) {
+        b = 1.0f;
+    } else if (t < kDonePhase4End) {
+        b = 1.0f - ((float)(t - kDonePhase3End) / (float)kDoneHoldMs);
+    } else {
+        b = 0.0f;
+    }
+    if (b <= 0.0f) return 0;
+    if (b >= 1.0f) return 5;
+    // Quantize: 5 pixels means b in [0.9, 1.0], 4 in [0.7, 0.9), etc.
+    const int n = (int)lroundf(b * 5.0f);
+    return (uint8_t)(n < 0 ? 0 : (n > 5 ? 5 : n));
 }
 
 void EyesCard::tick(uint32_t now_ms) {
