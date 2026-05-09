@@ -51,7 +51,10 @@ void CardController::begin() {
     };
     bus_.subscribe(EventKind::StatusTransitioned, bump_activity);
     bus_.subscribe(EventKind::PromptArrived,      bump_activity);
-    bus_.subscribe(EventKind::TokensChanged,      bump_activity);
+    // tokens_today ticks during every Claude turn that consumes tokens, so
+    // subscribing TokensChanged here would prevent the screen from ever
+    // dimming while a session is active. The event is still published by
+    // BleLink for telemetry/UI consumers; it's just not a wake source.
     // WifiConnected/WifiDisconnected are already subscribed for invalidate;
     // also bump activity from them.
     bus_.subscribe(EventKind::WifiConnected,    bump_activity);
