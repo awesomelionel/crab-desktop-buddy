@@ -641,6 +641,15 @@ git commit -m "feat(backlight): pure compute_duty helper + native tests"
 
 > **No native test** — depends on Arduino LEDC API. Verified by build and the manual smoke test in Task 12.
 
+> **API status (2026-05-09):** the v2.x LEDC functions used in earlier drafts
+> of this task (`ledcSetup`, `ledcAttachPin`, channel-indexed `ledcWrite`)
+> were removed in Arduino-ESP32 v3.x, which the project now targets. The
+> snippets below have been updated to the v3.x API (single-call
+> `ledcAttach(pin, freq, res)` and pin-indexed `ledcWrite(pin, duty)`); the
+> `kBacklightChannel` constant is gone (v3.x assigns the channel
+> automatically). If your `Display.cpp` / `Display.h` already match the
+> snippets below, skip to Task 7.
+
 - [ ] **Step 1: Update `Display.h`**
 
 Replace the existing class body in `src/display/Display.h` so it reads:
@@ -672,7 +681,9 @@ public:
     Adafruit_ST7789& tft() { return tft_; }
 
 private:
-    static constexpr int kBacklightChannel = 0;
+    // Arduino-ESP32 v3.x: ledcAttach() picks the channel automatically,
+    // so we no longer track one. Frequency / resolution still need to
+    // match the duty math in setBacklight().
     static constexpr int kBacklightFreqHz  = 5000;
     static constexpr int kBacklightBits    = 8;
 
@@ -702,8 +713,9 @@ void Display::begin() {
     delay(10);
 
     // Configure LEDC for the backlight before driving the pin.
-    ledcSetup(kBacklightChannel, kBacklightFreqHz, kBacklightBits);
-    ledcAttachPin(TFT_BACKLITE, kBacklightChannel);
+    // Arduino-ESP32 v3.x: ledcAttach() replaces ledcSetup + ledcAttachPin
+    // and picks the channel automatically.
+    ledcAttach(TFT_BACKLITE, kBacklightFreqHz, kBacklightBits);
     current_pct_ = 0;
     setBacklight(static_cast<uint8_t>(100));
 
@@ -717,7 +729,8 @@ void Display::setBacklight(uint8_t pct) {
     if (pct > 100) pct = 100;
     if (pct == current_pct_) return;
     uint32_t duty = (static_cast<uint32_t>(pct) * 255UL) / 100UL;
-    ledcWrite(kBacklightChannel, duty);
+    // v3.x: ledcWrite is keyed on the pin, not a channel.
+    ledcWrite(TFT_BACKLITE, duty);
     current_pct_ = pct;
     asleep_      = (pct == 0);
 }
@@ -940,12 +953,27 @@ In `CardController::begin()`, after the existing `bus_.subscribe(...)` calls, ad
     };
     bus_.subscribe(EventKind::StatusTransitioned, bump_activity);
     bus_.subscribe(EventKind::PromptArrived,      bump_activity);
-    bus_.subscribe(EventKind::TokensChanged,      bump_activity);
+    // NOTE: TokensChanged is intentionally NOT a wake source. tokens_today
+    // ticks during every Claude turn that consumes tokens, so subscribing
+    // here would prevent the screen from ever dimming while a session is
+    // active. The event is still published by BleLink so future telemetry
+    // / UI features can consume it; it just doesn't bump activity.
     // WifiConnected/WifiDisconnected are already subscribed for invalidate;
     // also bump activity from them.
     bus_.subscribe(EventKind::WifiConnected,    bump_activity);
     bus_.subscribe(EventKind::WifiDisconnected, bump_activity);
 ```
+
+> **Follow-up (deferred):** `StatusTransitioned` fires on every
+> `BuddyState` change, including `WORKING → IDLE` after each Claude turn.
+> During a chatty session this also fights the dim timeout, though less
+> aggressively than `TokensChanged` would. If hardware testing in Task 12
+> shows the screen rarely dims during real usage, the right next move is
+> to filter the wake at subscribe time — read `appState.buddyState()` in
+> the lambda and bump only on transitions into attention-worthy states
+> (e.g. `PROMPT`, `ERROR`, `WORKING` start). We don't pre-empt that here
+> because it depends on the actual `BuddyState` enum members and on the
+> behavior the user wants confirmed in practice.
 
 Replace the entire `runSleepManager` body with `runBacklightManager`:
 
@@ -1170,11 +1198,11 @@ While OFF, press D0, D1, or D2. Backlight should snap to FULL within one frame (
 
 - [ ] **Step 4: Verify wake from Claude-side events**
 
-While DIM (in the 30 s..300 s window), trigger each of:
+While DIM (in the 30 s..300 s window), verify each of:
 
-- A `BuddyState` transition: start a long Claude run from the Claude Code app, then stop it. Each transition (IDLE→WORKING and back) should restore FULL.
-- A new prompt: have Claude ask a tool-use question with a Permission prompt. Restore should be immediate.
-- A `tokens_today` change: any successful Claude command that consumes tokens. Restore should be immediate.
+- A `BuddyState` transition **wakes**: start a long Claude run from the Claude Code app, then stop it. Each transition (IDLE→WORKING and back) should restore FULL.
+- A new prompt **wakes**: have Claude ask a tool-use question with a Permission prompt. Restore should be immediate.
+- A `tokens_today` change **does NOT wake on its own**: while the screen is dim, run a Claude command that consumes tokens but does *not* change `BuddyState` or surface a new prompt (e.g. a short follow-up while already WORKING). `tokens_today` will tick up but the backlight should stay dim. If it wakes, `TokensChanged` is still subscribed in `CardController::begin()` — remove that subscription.
 
 While DIM, *no* wake should trigger from idle keepalive snapshots. Leave the device alone for >2 minutes inside the dim window with Claude connected but idle — backlight should stay dim, then transition to off at the sleep threshold.
 
