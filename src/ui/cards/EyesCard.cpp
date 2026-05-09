@@ -327,6 +327,7 @@ void EyesCard::armState(BuddyState state, uint32_t now) {
             draw_wait_gaze_dy_      = 0;
             break;
         case STATE_WORKING:
+            working_entered_ms_         = now;
             scan_epoch_ms_              = now;
             next_work_blink_ms_         = now + kWorkBlinkIntervalMs;
             work_blink_step_deadline_ms_ = 0;
