@@ -3,7 +3,6 @@
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
-#include <string>
 
 // Nordic UART Service UUIDs — every BLE serial example uses these.
 #define NUS_SERVICE_UUID "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
@@ -33,12 +32,10 @@ static void rxPush(const uint8_t* p, size_t n) {
 
 class RxCallbacks : public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic* c) override {
-        // ESP32 BLE Arduino >= 2.0 returns std::string from getValue();
-        // earlier versions returned Arduino String. Use std::string here so
-        // we are explicit about which API we depend on.
-        std::string v = c->getValue();
-        if (!v.empty())
-            rxPush(reinterpret_cast<const uint8_t*>(v.data()), v.size());
+        // Arduino-ESP32 v3.x: BLECharacteristic::getValue() returns String.
+        String v = c->getValue();
+        if (v.length())
+            rxPush(reinterpret_cast<const uint8_t*>(v.c_str()), v.length());
     }
 };
 

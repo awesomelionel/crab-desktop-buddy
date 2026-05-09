@@ -29,7 +29,6 @@ public:
     int height() const { return H; }
 
 private:
-    static constexpr int kBacklightChannel = 0;
     static constexpr int kBacklightFreqHz  = 5000;
     static constexpr int kBacklightBits    = 8;
 

@@ -11,8 +11,8 @@ void Display::begin() {
     delay(10);
 
     // Configure LEDC for the backlight before driving the pin.
-    ledcSetup(kBacklightChannel, kBacklightFreqHz, kBacklightBits);
-    ledcAttachPin(TFT_BACKLITE, kBacklightChannel);
+    // Arduino-ESP32 v3.x: ledcAttach() replaces ledcSetup + ledcAttachPin.
+    ledcAttach(TFT_BACKLITE, kBacklightFreqHz, kBacklightBits);
     current_pct_ = 0;
     setBacklight(static_cast<uint8_t>(100));
 
@@ -26,7 +26,7 @@ void Display::setBacklight(uint8_t pct) {
     if (pct > 100) pct = 100;
     if (pct == current_pct_) return;
     uint32_t duty = (static_cast<uint32_t>(pct) * 255UL) / 100UL;
-    ledcWrite(kBacklightChannel, duty);
+    ledcWrite(TFT_BACKLITE, duty);
     current_pct_ = pct;
     asleep_      = (pct == 0);
 }
