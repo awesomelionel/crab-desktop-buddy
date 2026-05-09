@@ -175,6 +175,26 @@ inline int irlerp(int a, int b, float k) {
     return (int)lroundf((float)a + ((float)b - (float)a) * k);
 }
 
+// Filled upper-half ellipse rasterized into a canvas. Bottom edge sits at
+// y = y_bottom (inclusive); top apex is at y = y_bottom - ry. The ellipse
+// is centered on cx with horizontal radius rx. Half-widths are computed
+// per-scanline from the ellipse equation x^2/rx^2 + y^2/ry^2 = 1, then
+// drawn as a single drawFastHLine. Cheap (≤ ry+1 horizontal lines).
+void drawUpperHalfEllipse(GFXcanvas16& canvas, int cx, int y_bottom,
+                          int rx, int ry, uint16_t color) {
+    if (ry <= 0 || rx <= 0) return;
+    for (int dy = 0; dy <= ry; dy++) {
+        const float yfrac = (float)dy / (float)ry;
+        const float wfrac = 1.0f - yfrac * yfrac;
+        const float clamped = wfrac < 0.0f ? 0.0f : wfrac;
+        const int   half_w = (int)lroundf((float)rx * sqrtf(clamped));
+        const int   y      = y_bottom - dy;
+        const int   x0     = cx - half_w;
+        const int   w      = 2 * half_w + 1;
+        canvas.drawFastHLine(x0, y, w, color);
+    }
+}
+
 // Fill the strips of rect A that are NOT inside rect B with the given
 // colour. Used for tearing-free differential updates: pass (OLD, NEW,
 // BLACK) to erase pixels that were in the previous frame but aren't
@@ -498,7 +518,6 @@ void EyesCard::drawDoneFrame(Adafruit_ST7789& tft, uint32_t t) {
     if (!done_canvas_r_) done_canvas_r_ = new GFXcanvas16(kDoneCanvasW, kDoneCanvasH);
     if (!done_canvas_l_ || !done_canvas_r_) return;  // OOM: silently skip frame
 
-    // Compute current eye geometry from the timeline.
     int  w, h, top_y;
     bool ellipse_shape;
 
@@ -516,26 +535,49 @@ void EyesCard::drawDoneFrame(Adafruit_ST7789& tft, uint32_t t) {
         h     = irlerp(38, 28, k);
         top_y = irlerp(44, 56, k);
         ellipse_shape = false;
-    } else {
-        // Phases 3-5: TODO in Task 5. Hold the settle-low geometry for now
-        // so the build is exercisable.
+    } else if (t < kDonePhase3End) {
+        // Phase 3: morph. H 28->16, W 30, top fixed at 56. Switch shape to
+        // upper-half ellipse — at H=28 the ellipse looks like a tall dome,
+        // at H=16 the canonical ^_^ smile. The shape change at t=200 reads
+        // as the eyes "closing into smiles."
+        const float k = ease_out_cubic((float)(t - kDonePhase2End) / (float)kDoneMorphMs);
         w     = 30;
-        h     = 28;
-        top_y = 56;
-        ellipse_shape = false;
+        h     = irlerp(28, kDoneArcH, k);
+        top_y = kDoneArcTop;
+        ellipse_shape = true;
+    } else if (t < kDonePhase4End) {
+        // Phase 4: hold ^_^ for 750 ms.
+        w     = 30;
+        h     = kDoneArcH;
+        top_y = kDoneArcTop;
+        ellipse_shape = true;
+    } else {
+        // Phase 5: return to idle. H 16->30, W 30, top 56->52 (eased).
+        // Stay on the ellipse shape during the return — at H=30 the half-
+        // ellipse is a tall dome that's similar enough to the IDLE rect
+        // that the t=1500 handover (followed by render()'s forced
+        // full_clear) reads as the eyes opening back up.
+        const uint32_t phase5_dur = kDoneTotalMs - kDonePhase4End;  // 400 ms
+        const float k = ease_out_cubic((float)(t - kDonePhase4End) / (float)phase5_dur);
+        w     = 30;
+        h     = irlerp(kDoneArcH, 30, k);
+        top_y = irlerp(kDoneArcTop, kBaseIdleY, k);
+        ellipse_shape = true;
     }
 
-    // Render each eye via the canvas: clear, draw shape, push as one bitmap.
-    // Eye is centered horizontally within the canvas (canvas is 32 px wide,
-    // eye is w px wide where w in {30, 31, 32}).
+    // Render each eye via its canvas: clear, draw shape, push as one bitmap.
     auto draw_eye = [&](GFXcanvas16* c, int canvas_x) {
         c->fillScreen(ST77XX_BLACK);
-        const int local_top = top_y - kDoneCanvasY;
-        const int x_offset  = (kDoneCanvasW - w) / 2;
-        if (!ellipse_shape) {
+        const int local_top    = top_y - kDoneCanvasY;
+        const int local_bottom = local_top + h - 1;
+        const int x_offset     = (kDoneCanvasW - w) / 2;
+        if (ellipse_shape) {
+            // Center horizontally; rx = w/2, ry = h.
+            drawUpperHalfEllipse(*c, kDoneCanvasW / 2, local_bottom,
+                                 w / 2, h, ST77XX_WHITE);
+        } else {
             c->fillRect(x_offset, local_top, w, h, ST77XX_WHITE);
         }
-        // ellipse_shape branch added in Task 5.
         tft.drawRGBBitmap(canvas_x, kDoneCanvasY, c->getBuffer(),
                           kDoneCanvasW, kDoneCanvasH);
     };
