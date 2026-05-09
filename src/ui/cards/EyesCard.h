@@ -35,6 +35,9 @@ private:
     void tickGlanceIdle(uint32_t now_ms);
     void tickWaitGaze(uint32_t now_ms);
     void tickQuestionMarks(uint32_t now_ms);
+    void tickDone(uint32_t now_ms);
+    void drawDoneFrame(Adafruit_ST7789& tft, uint32_t t_into_done);
+    uint8_t doneSparkleCount(uint32_t t_into_done) const;
     void drawFrame(Adafruit_ST7789& tft, BuddyState state, bool full_clear);
     void drawRotatedSlit(Adafruit_GFX& gfx, int cx, int cy, int h, int sign);
 
@@ -77,6 +80,16 @@ private:
     QBubble    q_bubbles_[8];     // capacity = kQBubbleCap
     uint32_t   next_q_spawn_ms_;
 
+    // ---- STATE_DONE celebration overlay ----
+    // DONE is NOT a BuddyState — it is a render-only animation phase that
+    // overlays STATE_IDLE for 1.5 s following a direct WORKING -> IDLE
+    // transition. See docs/superpowers/specs/2026-05-09-done-eyes-design.md.
+    uint32_t      working_entered_ms_;
+    bool          done_active_;
+    uint32_t      done_start_ms_;
+    GFXcanvas16*  done_canvas_l_;   // lazy ~2.5 KB; lifetime = card
+    GFXcanvas16*  done_canvas_r_;   // lazy ~2.5 KB; lifetime = card
+
     // Dirty-tracking against the last rendered frame: a snapshot of the
     // draw outputs so isDirty() can flip true any time the animation moved.
     bool       frame_valid_;
@@ -97,6 +110,11 @@ private:
     char       last_footer_device_[20];
     bool       last_footer_live_;
     bool       last_footer_drawn_;     // false until the footer first appears
+
+    // ---- DONE dirty-tracking snapshot ----
+    bool          last_done_active_;
+    uint32_t      last_done_phase_t_;
+    uint8_t       last_sparkle_brightness_n_;
 
     // Off-screen canvas for the WORKING eye render. Each eye is composed
     // here in RAM (54×21 px = 2.3 KB) then pushed to the LCD as one

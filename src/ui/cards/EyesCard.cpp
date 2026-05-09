@@ -118,6 +118,63 @@ const int      kBadgeBottomGap = 4;
 // kFooterH = 18 from src/ui/Footer.h
 const int      kBadgeY       = 135 - 18 - kBadgeBottomGap - kBadgeH;  // 95
 
+// ---- STATE_DONE celebration overlay ----
+// Suppression threshold: WORKING must have lasted at least this long for the
+// DONE animation to fire. Avoids flashing a delighted face on every quick
+// tool call.
+const uint32_t kDoneSuppressMs   = 1500;
+
+// Total celebration length and per-phase boundaries (cumulative ms from
+// done_start_ms_).
+const uint32_t kDoneTotalMs      = 1500;
+const uint32_t kDoneBounceUpMs   = 100;
+const uint32_t kDoneSettleLowMs  = 100;
+const uint32_t kDoneMorphMs      = 150;
+const uint32_t kDoneHoldMs       = 750;
+const uint32_t kDonePhase1End    = kDoneBounceUpMs;                   // 100
+const uint32_t kDonePhase2End    = kDonePhase1End + kDoneSettleLowMs; // 200
+const uint32_t kDonePhase3End    = kDonePhase2End + kDoneMorphMs;     // 350
+const uint32_t kDonePhase4End    = kDonePhase3End + kDoneHoldMs;      // 1100
+// Phase 5 (return) runs from kDonePhase4End to kDoneTotalMs (400 ms).
+
+// Per-eye canvas geometry. Y range 44..84 covers the bounce-up apex
+// (top=44, h=38, bottom=82) and the settle-low bottom (top=56, h=28,
+// bottom=84). Width is 32 to accommodate the 32-px bounce-wide phase
+// (eye widens to 32 during bounce, returns to 30 in the arc/return).
+// Canvas X is offset so the canvas centerline matches the eye centerline.
+const int      kDoneCanvasW         = 32;
+const int      kDoneCanvasH         = 40;
+const int      kDoneCanvasY         = 44;
+const int      kDoneCanvasLeftX     = kLeftX  + (kEyeW - kDoneCanvasW) / 2;  // 29
+const int      kDoneCanvasRightX    = kRightX + (kEyeW - kDoneCanvasW) / 2;  // 179
+
+// Hold-pose arc shape.
+const int      kDoneArcH         = 16;
+const int      kDoneArcTop       = 56;
+
+// Sparkle: 4-point cross at (220, 56) — center pixel + four satellites
+// at (±7, 0), (0, ±7). Drawn in the right-side outer margin past the right eye.
+const int      kDoneSparkleCx    = 220;
+const int      kDoneSparkleCy    = 56;
+const int      kDoneSparkleArm   = 7;
+// Erase bbox covers the cross plus 1 px margin: (212..228) × (48..64).
+const int      kDoneSparkleBboxX = kDoneSparkleCx - kDoneSparkleArm - 1;  // 212
+const int      kDoneSparkleBboxY = kDoneSparkleCy - kDoneSparkleArm - 1;  // 48
+const int      kDoneSparkleBboxW = 2 * kDoneSparkleArm + 3;               // 17
+const int      kDoneSparkleBboxH = 2 * kDoneSparkleArm + 3;               // 17
+
+// Cubic ease-out: 1 - (1-k)^3. Same convention as tickGlanceIdle / tickWaitGaze.
+inline float ease_out_cubic(float k) {
+    if (k < 0.0f) k = 0.0f;
+    if (k > 1.0f) k = 1.0f;
+    const float inv = 1.0f - k;
+    return 1.0f - inv * inv * inv;
+}
+
+inline int irlerp(int a, int b, float k) {
+    return (int)lroundf((float)a + ((float)b - (float)a) * k);
+}
+
 // Fill the strips of rect A that are NOT inside rect B with the given
 // colour. Used for tearing-free differential updates: pass (OLD, NEW,
 // BLACK) to erase pixels that were in the previous frame but aren't
@@ -177,6 +234,11 @@ EyesCard::EyesCard(const AppState& state, PromptUi& prompt)
     last_footer_drawn_     = false;
     work_canvas_           = nullptr;
     wait_q_canvas_         = nullptr;
+    done_canvas_l_     = nullptr;
+    done_canvas_r_     = nullptr;
+    last_done_active_  = false;
+    last_done_phase_t_ = 0;
+    last_sparkle_brightness_n_ = 0;
 }
 
 void EyesCard::invalidate() {
@@ -213,6 +275,12 @@ void EyesCard::resetAnim() {
 
     last_wait_gaze_dy_        = 0;
     last_badge_visible_       = false;
+
+    working_entered_ms_ = now;
+    done_active_        = false;
+    done_start_ms_      = 0;
+    // done_canvas_l_/r_ are NOT reset — they are owned for the card's
+    // lifetime, like work_canvas_ and wait_q_canvas_.
 }
 
 void EyesCard::setFooter(const char* name, bool live) {
@@ -406,6 +474,18 @@ void EyesCard::tickQuestionMarks(uint32_t now) {
         }
         next_q_spawn_ms_ = now + kQIntervalMs;
     }
+}
+
+void EyesCard::tickDone(uint32_t /*now_ms*/) {
+    // Stub — implemented in Task 3.
+}
+
+void EyesCard::drawDoneFrame(Adafruit_ST7789& /*tft*/, uint32_t /*t*/) {
+    // Stub — implemented in Tasks 4-6.
+}
+
+uint8_t EyesCard::doneSparkleCount(uint32_t /*t*/) const {
+    return 0;  // implemented in Task 6
 }
 
 void EyesCard::tick(uint32_t now_ms) {
