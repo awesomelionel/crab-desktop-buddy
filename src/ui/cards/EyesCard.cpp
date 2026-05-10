@@ -124,9 +124,12 @@ const int      kBadgeY       = 135 - 18 - kBadgeBottomGap - kBadgeH;  // 95
 // tool call.
 const uint32_t kDoneSuppressMs   = 1500;
 
-// Total celebration length and per-phase boundaries (cumulative ms from
-// done_start_ms_).
-const uint32_t kDoneTotalMs      = 1500;
+// Per-loop length and per-phase boundaries within one loop (cumulative ms
+// from the loop start). The full celebration runs the loop kDoneLoops
+// times back-to-back; total duration = kDoneLoopMs * kDoneLoops.
+const uint32_t kDoneLoopMs       = 1500;
+const uint32_t kDoneLoops        = 2;
+const uint32_t kDoneTotalMs      = kDoneLoopMs * kDoneLoops;
 const uint32_t kDoneBounceUpMs   = 100;
 const uint32_t kDoneSettleLowMs  = 100;
 const uint32_t kDoneMorphMs      = 150;
@@ -135,7 +138,7 @@ const uint32_t kDonePhase1End    = kDoneBounceUpMs;                   // 100
 const uint32_t kDonePhase2End    = kDonePhase1End + kDoneSettleLowMs; // 200
 const uint32_t kDonePhase3End    = kDonePhase2End + kDoneMorphMs;     // 350
 const uint32_t kDonePhase4End    = kDonePhase3End + kDoneHoldMs;      // 1100
-// Phase 5 (return) runs from kDonePhase4End to kDoneTotalMs (400 ms).
+// Phase 5 (return) runs from kDonePhase4End to kDoneLoopMs (400 ms).
 
 // Per-eye canvas geometry. Y range 44..84 covers the bounce-up apex
 // (top=44, h=38, bottom=82) and the settle-low bottom (top=56, h=28,
@@ -152,16 +155,19 @@ const int      kDoneCanvasRightX    = kRightX + (kEyeW - kDoneCanvasW) / 2;  // 
 const int      kDoneArcH         = 16;
 const int      kDoneArcTop       = 56;
 
-// Sparkle: 4-point cross at (220, 56) — center pixel + four satellites
-// at (±7, 0), (0, ±7). Drawn in the right-side outer margin past the right eye.
-const int      kDoneSparkleCx    = 220;
-const int      kDoneSparkleCy    = 56;
-const int      kDoneSparkleArm   = 7;
-// Erase bbox covers the cross plus 1 px margin: (212..228) × (48..64).
-const int      kDoneSparkleBboxX = kDoneSparkleCx - kDoneSparkleArm - 1;  // 212
-const int      kDoneSparkleBboxY = kDoneSparkleCy - kDoneSparkleArm - 1;  // 48
-const int      kDoneSparkleBboxW = 2 * kDoneSparkleArm + 3;               // 17
-const int      kDoneSparkleBboxH = 2 * kDoneSparkleArm + 3;               // 17
+// Sparkles: 4-point crosses at multiple anchor positions around the eyes.
+// Each anchor draws a center pixel + four satellites at (±arm, 0) and
+// (0, ±arm). Each cross point is rendered as a 3 × 3 block centered on its
+// anchor. The anchors are placed clear of the widest bounce-phase eye
+// extent (canvas y=44..84, eye max x=210 right / x=29 left).
+const int      kDoneSparkleArm   = 11;
+struct SparkleAnchor { int16_t cx; int16_t cy; };
+const SparkleAnchor kDoneSparkleAnchors[] = {
+    { 224,  36 },   // top-right (just above and right of the right eye)
+    {  14,  36 },   // top-left  (mirror)
+    { 120,  18 },   // top-center (above the eye band, between the eyes)
+};
+const int kDoneSparkleN = sizeof(kDoneSparkleAnchors) / sizeof(SparkleAnchor);
 
 // Cubic ease-out: 1 - (1-k)^3. Same convention as tickGlanceIdle / tickWaitGaze.
 inline float ease_out_cubic(float k) {
@@ -521,34 +527,38 @@ void EyesCard::drawDoneFrame(Adafruit_ST7789& tft, uint32_t t) {
     if (!done_canvas_r_) done_canvas_r_ = new GFXcanvas16(kDoneCanvasW, kDoneCanvasH);
     if (!done_canvas_l_ || !done_canvas_r_) return;  // OOM: silently skip frame
 
+    // The full celebration is kDoneLoopMs * kDoneLoops long; the per-loop
+    // phase clock is t modulo one loop length.
+    const uint32_t t_loop = t % kDoneLoopMs;
+
     int  w, h, top_y;
     bool ellipse_shape;
 
-    if (t < kDonePhase1End) {
+    if (t_loop < kDonePhase1End) {
         // Phase 1: bounce up. H 30->38, W 30->32, top 52->44 (eased).
-        const float k = ease_out_cubic((float)t / (float)kDoneBounceUpMs);
+        const float k = ease_out_cubic((float)t_loop / (float)kDoneBounceUpMs);
         w     = irlerp(30, 32, k);
         h     = irlerp(30, 38, k);
         top_y = irlerp(kBaseIdleY, 44, k);
         ellipse_shape = false;
-    } else if (t < kDonePhase2End) {
+    } else if (t_loop < kDonePhase2End) {
         // Phase 2: settle low. H 38->28, W 32, top 44->56 (eased).
-        const float k = ease_out_cubic((float)(t - kDonePhase1End) / (float)kDoneSettleLowMs);
+        const float k = ease_out_cubic((float)(t_loop - kDonePhase1End) / (float)kDoneSettleLowMs);
         w     = 32;
         h     = irlerp(38, 28, k);
         top_y = irlerp(44, 56, k);
         ellipse_shape = false;
-    } else if (t < kDonePhase3End) {
+    } else if (t_loop < kDonePhase3End) {
         // Phase 3: morph. H 28->16, W 30, top fixed at 56. Switch shape to
         // upper-half ellipse — at H=28 the ellipse looks like a tall dome,
         // at H=16 the canonical ^_^ smile. The shape change at t=200 reads
         // as the eyes "closing into smiles."
-        const float k = ease_out_cubic((float)(t - kDonePhase2End) / (float)kDoneMorphMs);
+        const float k = ease_out_cubic((float)(t_loop - kDonePhase2End) / (float)kDoneMorphMs);
         w     = 30;
         h     = irlerp(28, kDoneArcH, k);
         top_y = kDoneArcTop;
         ellipse_shape = true;
-    } else if (t < kDonePhase4End) {
+    } else if (t_loop < kDonePhase4End) {
         // Phase 4: hold ^_^ for 750 ms.
         w     = 30;
         h     = kDoneArcH;
@@ -558,10 +568,9 @@ void EyesCard::drawDoneFrame(Adafruit_ST7789& tft, uint32_t t) {
         // Phase 5: return to idle. H 16->30, W 30, top 56->52 (eased).
         // Stay on the ellipse shape during the return — at H=30 the half-
         // ellipse is a tall dome that's similar enough to the IDLE rect
-        // that the t=1500 handover (followed by render()'s forced
-        // full_clear) reads as the eyes opening back up.
-        const uint32_t phase5_dur = kDoneTotalMs - kDonePhase4End;  // 400 ms
-        const float k = ease_out_cubic((float)(t - kDonePhase4End) / (float)phase5_dur);
+        // that the loop boundary handover reads as the eyes opening back up.
+        const uint32_t phase5_dur = kDoneLoopMs - kDonePhase4End;  // 400 ms
+        const float k = ease_out_cubic((float)(t_loop - kDonePhase4End) / (float)phase5_dur);
         w     = 30;
         h     = irlerp(kDoneArcH, 30, k);
         top_y = irlerp(kDoneArcTop, kBaseIdleY, k);
@@ -588,40 +597,48 @@ void EyesCard::drawDoneFrame(Adafruit_ST7789& tft, uint32_t t) {
     draw_eye(done_canvas_l_, kDoneCanvasLeftX);
     draw_eye(done_canvas_r_, kDoneCanvasRightX);
 
-    // Sparkle: 4-point cross at (kDoneSparkleCx, kDoneSparkleCy). Erase the
-    // entire bbox first (cheap — ~17×17 px), then draw n pixels (0..5):
+    // Sparkles: a 4-point cross at every kDoneSparkleAnchors[] entry. For
+    // each anchor: erase its bbox, then draw n blocks (0..5) outer-first so
+    // the visual centroid stays steady as brightness drops:
     //   center always drawn first when n >= 1
     //   then ±x satellites at n >= 2 (right) and n >= 3 (left)
     //   then ±y satellites at n >= 4 (up) and n >= 5 (down)
-    // Outer-first fade as brightness drops keeps the visual centroid steady.
-    tft.fillRect(kDoneSparkleBboxX, kDoneSparkleBboxY,
-                 kDoneSparkleBboxW, kDoneSparkleBboxH, ST77XX_BLACK);
+    // Each "block" is a 3 × 3 fillRect at (anchor - 1, anchor - 1).
     const uint8_t n = doneSparkleCount(t);
-    if (n >= 5) tft.fillRect(kDoneSparkleCx, kDoneSparkleCy + kDoneSparkleArm, 1, 1, ST77XX_WHITE);
-    if (n >= 4) tft.fillRect(kDoneSparkleCx, kDoneSparkleCy - kDoneSparkleArm, 1, 1, ST77XX_WHITE);
-    if (n >= 3) tft.fillRect(kDoneSparkleCx - kDoneSparkleArm, kDoneSparkleCy, 1, 1, ST77XX_WHITE);
-    if (n >= 2) tft.fillRect(kDoneSparkleCx + kDoneSparkleArm, kDoneSparkleCy, 1, 1, ST77XX_WHITE);
-    if (n >= 1) tft.fillRect(kDoneSparkleCx, kDoneSparkleCy, 1, 1, ST77XX_WHITE);
+    for (int i = 0; i < kDoneSparkleN; i++) {
+        const int cx = kDoneSparkleAnchors[i].cx;
+        const int cy = kDoneSparkleAnchors[i].cy;
+        tft.fillRect(cx - kDoneSparkleArm - 2, cy - kDoneSparkleArm - 2,
+                     2 * kDoneSparkleArm + 5, 2 * kDoneSparkleArm + 5,
+                     ST77XX_BLACK);
+        if (n >= 5) tft.fillRect(cx - 1, cy + kDoneSparkleArm - 1, 3, 3, ST77XX_WHITE);
+        if (n >= 4) tft.fillRect(cx - 1, cy - kDoneSparkleArm - 1, 3, 3, ST77XX_WHITE);
+        if (n >= 3) tft.fillRect(cx - kDoneSparkleArm - 1, cy - 1, 3, 3, ST77XX_WHITE);
+        if (n >= 2) tft.fillRect(cx + kDoneSparkleArm - 1, cy - 1, 3, 3, ST77XX_WHITE);
+        if (n >= 1) tft.fillRect(cx - 1, cy - 1, 3, 3, ST77XX_WHITE);
+    }
 }
 
 uint8_t EyesCard::doneSparkleCount(uint32_t t) const {
-    // Brightness shape:
+    // Brightness shape (per loop):
     //   phase 1 (0..100):       0.0 -> 0.5 (linear)
     //   phase 2 (100..200):     0.5 -> 1.0 (linear)
     //   phase 3 (200..350):     1.0 (hold)
     //   phase 4 (350..1100):    1.0 -> 0.0 (linear over 750 ms)
-    //   phase 5 (1100..):       0.0
+    //   phase 5 (1100..1500):   0.0
     // Quantized to 0..5 visible pixels (5 = full bright cross, 0 = hidden).
     // The 5 pixels fade out outer-first, leaving the center until last.
+    // Multi-loop: the curve restarts each loop so the sparkles re-pop.
+    const uint32_t t_loop = t % kDoneLoopMs;
     float b;
-    if (t < kDonePhase1End) {
-        b = 0.5f * ((float)t / (float)kDoneBounceUpMs);
-    } else if (t < kDonePhase2End) {
-        b = 0.5f + 0.5f * ((float)(t - kDonePhase1End) / (float)kDoneSettleLowMs);
-    } else if (t < kDonePhase3End) {
+    if (t_loop < kDonePhase1End) {
+        b = 0.5f * ((float)t_loop / (float)kDoneBounceUpMs);
+    } else if (t_loop < kDonePhase2End) {
+        b = 0.5f + 0.5f * ((float)(t_loop - kDonePhase1End) / (float)kDoneSettleLowMs);
+    } else if (t_loop < kDonePhase3End) {
         b = 1.0f;
-    } else if (t < kDonePhase4End) {
-        b = 1.0f - ((float)(t - kDonePhase3End) / (float)kDoneHoldMs);
+    } else if (t_loop < kDonePhase4End) {
+        b = 1.0f - ((float)(t_loop - kDonePhase3End) / (float)kDoneHoldMs);
     } else {
         b = 0.0f;
     }
@@ -767,17 +784,15 @@ void EyesCard::render(Display& display) {
     // ---- DONE celebration overlay ----
     if (done_active_) {
         const uint32_t t = millis() - done_start_ms_;
-        // First frame of DONE: clear the prior IDLE eye pixels so the canvas
-        // push doesn't leave a fringe. The canvas's own bbox covers y=44..84
-        // which fully contains the IDLE eye band (y=52..82), so a band-only
-        // erase suffices — no fillScreen.
+        // First frame of DONE: wipe everything. Targeted band-erases were
+        // not enough — the prior WORKING state leaves typing dots above the
+        // eye band (y=22) that no eye-band or sparkle-bbox erase covers,
+        // and they'd ghost into the celebration. A single fillScreen at
+        // this state-transition moment matches the pattern every other
+        // armState case uses (CLAUDE.md allows fillScreen at state
+        // transitions; only continuous-animation frames must avoid it).
         if (!last_done_active_) {
-            tft.fillRect(kDoneCanvasLeftX,  kDoneCanvasY,
-                         kDoneCanvasW, kDoneCanvasH, ST77XX_BLACK);
-            tft.fillRect(kDoneCanvasRightX, kDoneCanvasY,
-                         kDoneCanvasW, kDoneCanvasH, ST77XX_BLACK);
-            tft.fillRect(kDoneSparkleBboxX, kDoneSparkleBboxY,
-                         kDoneSparkleBboxW, kDoneSparkleBboxH, ST77XX_BLACK);
+            tft.fillScreen(ST77XX_BLACK);
         }
         drawDoneFrame(tft, t);
         last_done_active_          = true;
