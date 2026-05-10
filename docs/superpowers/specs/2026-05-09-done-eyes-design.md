@@ -79,8 +79,8 @@ All phase boundaries are exact ms offsets from `done_start_ms_`.
 | 0 → 100 | Bounce up | H 30→38, W 30→32, top 52→44 (eased) | brightness 0 → 0.5 |
 | 100 → 200 | Settle low | H 38→28, W 32→32, top 44→56 (eased) | brightness 0.5 → 1.0 |
 | 200 → 350 | Morph to arc | H 28→16, W 30, top 56→56; round-rect → upper-half ellipse (lerp) | brightness 1.0 |
-| 350 → 1100 | Hold arcs | H 16, W 30, top 56, half-ellipse | brightness 1.0 → 0 (eased over the window) |
-| 1100 → 1500 | Return to idle | H 16→30, W 30, top 56→52, ellipse → round-rect (lerp) | hidden |
+| 350 → 1100 | Hold arcs | H 16, W 30, top 56, half-ellipse | brightness 1.0 → 0 (linear over the window; quantized to 5 steps so the curve shape is dominated by the staircase) |
+| 1100 → 1500 | Return to idle | H 16→30, W 30, top 56→52, half-ellipse throughout (at H=30 it's similar enough to the IDLE rect that the t=1500 handover reads as the eyes opening) | hidden |
 
 **Easing:** the bounce, morph, and return phases use cubic ease-out
 (`1 - (1 - k)^3`), matching the existing convention in
@@ -155,7 +155,9 @@ in the bbox, so no separate erase pass is needed for the eyes.
 ### Sparkle: direct primitives
 
 Five `fillRect`s of 1×1 px for the center + four satellites. Erased
-before each redraw with one `fillRect` over the ~14 × 14 px bbox.
+before each redraw with one `fillRect` over the ~17 × 17 px bbox
+(`2 * kDoneSparkleArm + 3` on each axis — covers the cross plus a 1 px
+margin).
 
 The sparkle's bbox is fixed and small — no canvas needed. Brightness
 is implemented as "draw N of 5 pixels" rather than a true alpha; the

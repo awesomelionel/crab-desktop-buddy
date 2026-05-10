@@ -296,9 +296,12 @@ void EyesCard::resetAnim() {
     last_wait_gaze_dy_        = 0;
     last_badge_visible_       = false;
 
-    working_entered_ms_ = now;
-    done_active_        = false;
-    done_start_ms_      = 0;
+    working_entered_ms_        = now;
+    done_active_               = false;
+    done_start_ms_             = 0;
+    last_done_active_          = false;
+    last_done_phase_t_         = 0;
+    last_sparkle_brightness_n_ = 0;
     // done_canvas_l_/r_ are NOT reset — they are owned for the card's
     // lifetime, like work_canvas_ and wait_q_canvas_.
 }
@@ -727,10 +730,12 @@ bool EyesCard::isDirty() const {
     if (!frame_valid_) return true;
     if (last_state_      != state_.buddyState()) return true;
 
-    // ---- DONE: redraw whenever the celebration is active and any tracked
-    //      attribute has advanced. The hold pose (phase 4) leaves all three
-    //      tracked fields unchanged for ~750 ms, so we correctly suppress
-    //      redraws there.
+    // ---- DONE: redraw on each 16 ms tick so the eye morph and sparkle
+    //      decay stay smooth. The bucketed phase clock advances every tick,
+    //      so isDirty() effectively runs at the frame rate during DONE —
+    //      same cadence as IDLE/WAITING animations. The bypass at the
+    //      bottom of the block is what keeps the IDLE-era checks from
+    //      firing (e.g. last_h_ != draw_h_) on celebration frames.
     if (last_done_active_ != done_active_) return true;
     if (done_active_) {
         const uint32_t t      = millis() - done_start_ms_;
