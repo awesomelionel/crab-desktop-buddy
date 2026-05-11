@@ -30,6 +30,14 @@ public:
     // Used by the sleep manager to gate the backlight.
     uint32_t lastInputMs() const { return last_input_ms_; }
 
+    // True iff the center button is currently held (debounced state).
+    bool centerHeld() const { return center_held_; }
+
+    // Milliseconds of continuous center-button hold; 0 if not held.
+    uint32_t centerHoldMs(uint32_t now_ms) const {
+        return center_held_ ? (now_ms - center_press_ms_) : 0;
+    }
+
     // Routes `ev` to the active card; if the card returns false, treats
     // BTN_UP / BTN_DOWN as carousel prev/next.
     void dispatch(ButtonEvent ev, uint32_t now_ms);
