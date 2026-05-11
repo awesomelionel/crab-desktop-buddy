@@ -8,6 +8,7 @@
 #include "../core/AppState.h"
 #include "../core/ConfigStore.h"
 #include "../core/Settings.h"
+#include "../core/firmware_version.h"
 #include "WifiManager.h"
 
 namespace {
@@ -481,6 +482,14 @@ void HttpServer::registerStaHandlers() {
             "loadSettings();loadNets();pollStatus();setInterval(pollStatus,3000);"
             "</script>");
         server_->send(200, "text/html", html);
+    });
+
+    // ---- /api/firmware-version
+    server_->on("/api/firmware-version", HTTP_GET, [this]() {
+        String out = "{\"version\":";
+        appendJsonString(out, FIRMWARE_VERSION);
+        out += '}';
+        server_->send(200, "application/json", out);
     });
 
     // ---- /api/status (kept under /api/* now)

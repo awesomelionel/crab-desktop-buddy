@@ -16,6 +16,11 @@ BASE="http://${HOST}"
 
 step() { printf '\n\033[1;33m== %s ==\033[0m\n' "$*"; }
 
+step "GET /api/firmware-version"
+RESP=$(curl -fsS "$BASE/api/firmware-version")
+echo "$RESP" | jq .
+echo "$RESP" | grep -q '"version"' || { echo "FAIL: no version key"; exit 1; }
+
 step "GET /api/status"
 curl -fsS "$BASE/api/status" | jq .
 
