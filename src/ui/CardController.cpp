@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <string.h>
 
+#include "../core/FactoryResetCoordinator.h"
 #include "../core/UpdateManager.h"
 #include "../display/Display.h"
 #include "../net/BleLink.h"
@@ -10,12 +11,13 @@
 
 CardController::CardController(AppState& app, EventBus& bus, WifiManager& wifi,
                                PromptUi& prompt, BleLink& ble, Settings& settings,
-                               UpdateManager& um,
+                               UpdateManager& um, FactoryResetCoordinator& fr,
                                int pin_btn_next, uint8_t btn_next_pressed_level,
                                int pin_btn_prev, uint8_t btn_prev_pressed_level)
     : app_(app), bus_(bus), wifi_(wifi), prompt_(prompt), ble_(ble),
       settings_(settings),
       um_(um),
+      fr_(fr),
       status_card_(app, prompt),
       eyes_card_(app, prompt),
       wifi_card_(wifi),
@@ -23,6 +25,7 @@ CardController::CardController(AppState& app, EventBus& bus, WifiManager& wifi,
                 pin_btn_prev, btn_prev_pressed_level),
       prompt_card_(prompt),
       updating_card_(um),
+      factory_reset_card_(fr),
       stack_(),
       prompt_visible_(false),
       last_cards_mask_(0),
@@ -172,7 +175,19 @@ void CardController::tick(uint32_t now_ms, Display& display) {
     }
 
     // Force-show overlays pre-empt the carousel. Wake the display so
-    // they're visible even if we'd otherwise be asleep.
+    // they're visible even if we'd otherwise be asleep. Order: factory
+    // reset highest priority (destructive), then OTA install.
+
+    factory_reset_card_.tick(now_ms);
+    if (factory_reset_card_.isActive()) {
+        if (display.isAsleep()) display.setBacklight(true);
+        if (factory_reset_card_.isDirty()) {
+            factory_reset_card_.render(display);
+        }
+        last_activity_ms_ = now_ms;
+        return;
+    }
+
     updating_card_.tick(now_ms);
     if (updating_card_.isActive()) {
         if (display.isAsleep()) display.setBacklight(true);

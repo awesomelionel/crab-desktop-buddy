@@ -11,6 +11,7 @@
 #include "prompt_ui.h"
 #include "settings_model.h"
 #include "cards/EyesCard.h"
+#include "cards/FactoryResetCard.h"
 #include "cards/NavTestCard.h"
 #include "cards/PromptCard.h"
 #include "cards/StatusCard.h"
@@ -19,6 +20,7 @@
 
 class Display;
 class BleLink;
+class FactoryResetCoordinator;
 class UpdateManager;
 
 // Owns the card carousel + prompt overlay, listens to EventBus, drains
@@ -29,7 +31,7 @@ class CardController {
 public:
     CardController(AppState& app, EventBus& bus, WifiManager& wifi,
                    PromptUi& prompt, BleLink& ble, Settings& settings,
-                   UpdateManager& um,
+                   UpdateManager& um, FactoryResetCoordinator& fr,
                    int pin_btn_next, uint8_t btn_next_pressed_level,
                    int pin_btn_prev, uint8_t btn_prev_pressed_level);
 
@@ -56,15 +58,17 @@ private:
     InputRouter* input_ = nullptr;
     uint32_t     last_activity_ms_ = 0;
 
-    UpdateManager& um_;
+    UpdateManager&           um_;
+    FactoryResetCoordinator& fr_;
 
-    StatusCard   status_card_;
-    EyesCard     eyes_card_;
-    WifiCard     wifi_card_;
-    NavTestCard  nav_card_;
-    PromptCard   prompt_card_;
-    UpdatingCard updating_card_;
-    CardStack    stack_;
+    StatusCard       status_card_;
+    EyesCard         eyes_card_;
+    WifiCard         wifi_card_;
+    NavTestCard      nav_card_;
+    PromptCard       prompt_card_;
+    UpdatingCard     updating_card_;
+    FactoryResetCard factory_reset_card_;
+    CardStack        stack_;
 
     bool         prompt_visible_;
     // Cached settings snapshot so rebuildStack only fires on actual change.
