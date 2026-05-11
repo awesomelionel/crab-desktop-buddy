@@ -4,6 +4,7 @@
 #include "core/ConfigStore.h"
 #include "core/EventBus.h"
 #include "core/Settings.h"
+#include "core/UpdateManager.h"
 #include "display/Display.h"
 #include "hal/Battery.h"
 #include "input/InputRouter.h"
@@ -72,6 +73,8 @@ void setup() {
     cardController.setInputRouter(&inputRouter);
     cardController.begin();
 
+    UpdateManager::instance().begin();
+
     // Hold center 5s to wipe Wi-Fi creds and reboot into the captive
     // portal. Useful when the network changes or the user wants to
     // reprovision without flashing.
@@ -108,6 +111,7 @@ void loop() {
     bleLink.tick(now);
     wifiManager.tick(now);
     httpServer.tick(now);
+    UpdateManager::instance().tick(now);
     battery.tick(now);
     {
         BatteryStatus bs;
