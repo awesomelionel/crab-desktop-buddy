@@ -108,6 +108,8 @@ void UpdateManager::doInstallBlocking() {
     client.setCACertBundle(github_certs_pem_start, bundle_size);
 
     httpUpdate.rebootOnUpdate(false);
+    // GitHub release-asset URLs 302 to objects.githubusercontent.com.
+    httpUpdate.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
     httpUpdate.onProgress([](int cur, int total) {
         UpdateManager::instance().setProgressInternal(
             (uint32_t)cur, (uint32_t)total);
