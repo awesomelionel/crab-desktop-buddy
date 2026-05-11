@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include <Arduino.h>
+#include <HTTPClient.h>
 #include <HTTPUpdate.h>
 #include <NetworkClientSecure.h>
 
@@ -107,18 +108,67 @@ void UpdateManager::doInstallBlocking() {
         (size_t)(github_certs_pem_end - github_certs_pem_start);
     client.setCACertBundle(github_certs_pem_start, bundle_size);
 
+    // Manually resolve the GitHub asset redirect — HTTPUpdate's built-in
+    // redirect follower has been unreliable with the cross-host TLS hop
+    // from github.com to release-assets.githubusercontent.com.
+    Serial.printf("[ota] resolving %s\n", latest_.download_url);
+    String installUrl = latest_.download_url;
+    {
+        HTTPClient probe;
+        probe.setTimeout(10000);
+        probe.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
+        if (!probe.begin(client, installUrl)) {
+            strncpy(last_error_, "probe begin failed", sizeof(last_error_) - 1);
+            state_ = State::Failed;
+            return;
+        }
+        const char* headerKeys[] = {"Location"};
+        probe.collectHeaders(headerKeys, 1);
+        int code = probe.GET();
+        Serial.printf("[ota] probe code=%d\n", code);
+        if (code == 301 || code == 302 || code == 307 || code == 308) {
+            String loc = probe.header("Location");
+            Serial.printf("[ota] redirect -> %.120s%s\n",
+                          loc.c_str(), loc.length() > 120 ? "..." : "");
+            if (loc.length() > 0) {
+                installUrl = loc;
+            } else {
+                strncpy(last_error_, "no Location header",
+                        sizeof(last_error_) - 1);
+                state_ = State::Failed;
+                probe.end();
+                return;
+            }
+        } else if (code != 200) {
+            char msg[64];
+            snprintf(msg, sizeof(msg), "probe http %d", code);
+            strncpy(last_error_, msg, sizeof(last_error_) - 1);
+            state_ = State::Failed;
+            probe.end();
+            return;
+        }
+        probe.end();
+    }
+
+    // Fresh TLS handshake for the resolved URL.
+    client.stop();
+
     httpUpdate.rebootOnUpdate(false);
-    // GitHub release-asset URLs 302 to objects.githubusercontent.com.
-    httpUpdate.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+    // URL is already resolved — no redirect-following needed.
+    httpUpdate.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
     httpUpdate.onProgress([](int cur, int total) {
         UpdateManager::instance().setProgressInternal(
             (uint32_t)cur, (uint32_t)total);
     });
 
+    Serial.printf("[ota] downloading %.120s%s\n",
+                  installUrl.c_str(),
+                  installUrl.length() > 120 ? "..." : "");
     t_httpUpdate_return result =
-        httpUpdate.update(client, latest_.download_url, FIRMWARE_VERSION);
+        httpUpdate.update(client, installUrl, FIRMWARE_VERSION);
 
     if (result == HTTP_UPDATE_OK) {
+        Serial.println("[ota] install OK; rebooting");
         state_ = State::InstallReady;
         delay(500);
         ESP.restart();   // never returns
@@ -126,6 +176,8 @@ void UpdateManager::doInstallBlocking() {
     }
 
     const String& msg = httpUpdate.getLastErrorString();
+    Serial.printf("[ota] install failed: %s (result=%d)\n",
+                  msg.c_str(), (int)result);
     strncpy(last_error_, msg.c_str(), sizeof(last_error_) - 1);
     last_error_[sizeof(last_error_) - 1] = 0;
     state_ = State::Failed;
