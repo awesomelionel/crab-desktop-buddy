@@ -3,22 +3,26 @@
 #include <Arduino.h>
 #include <string.h>
 
+#include "../core/UpdateManager.h"
 #include "../display/Display.h"
 #include "../net/BleLink.h"
 #include "backlight.h"
 
 CardController::CardController(AppState& app, EventBus& bus, WifiManager& wifi,
                                PromptUi& prompt, BleLink& ble, Settings& settings,
+                               UpdateManager& um,
                                int pin_btn_next, uint8_t btn_next_pressed_level,
                                int pin_btn_prev, uint8_t btn_prev_pressed_level)
     : app_(app), bus_(bus), wifi_(wifi), prompt_(prompt), ble_(ble),
       settings_(settings),
+      um_(um),
       status_card_(app, prompt),
       eyes_card_(app, prompt),
       wifi_card_(wifi),
       nav_card_(pin_btn_next, btn_next_pressed_level,
                 pin_btn_prev, btn_prev_pressed_level),
       prompt_card_(prompt),
+      updating_card_(um),
       stack_(),
       prompt_visible_(false),
       last_cards_mask_(0),
@@ -165,6 +169,18 @@ void CardController::tick(uint32_t now_ms, Display& display) {
     char outBuf[96];
     if (prompt_ui_take_outgoing(&prompt_, outBuf, sizeof(outBuf))) {
         ble_.writeLine(outBuf);
+    }
+
+    // Force-show overlays pre-empt the carousel. Wake the display so
+    // they're visible even if we'd otherwise be asleep.
+    updating_card_.tick(now_ms);
+    if (updating_card_.isActive()) {
+        if (display.isAsleep()) display.setBacklight(true);
+        if (updating_card_.isDirty()) {
+            updating_card_.render(display);
+        }
+        last_activity_ms_ = now_ms;   // prevent sleep while installing
+        return;
     }
 
     // Don't bother rendering while asleep — saves SPI traffic.

@@ -14,10 +14,12 @@
 #include "cards/NavTestCard.h"
 #include "cards/PromptCard.h"
 #include "cards/StatusCard.h"
+#include "cards/UpdatingCard.h"
 #include "cards/WifiCard.h"
 
 class Display;
 class BleLink;
+class UpdateManager;
 
 // Owns the card carousel + prompt overlay, listens to EventBus, drains
 // outgoing PromptUi decisions to BleLink, and runs the backlight manager
@@ -27,6 +29,7 @@ class CardController {
 public:
     CardController(AppState& app, EventBus& bus, WifiManager& wifi,
                    PromptUi& prompt, BleLink& ble, Settings& settings,
+                   UpdateManager& um,
                    int pin_btn_next, uint8_t btn_next_pressed_level,
                    int pin_btn_prev, uint8_t btn_prev_pressed_level);
 
@@ -53,11 +56,14 @@ private:
     InputRouter* input_ = nullptr;
     uint32_t     last_activity_ms_ = 0;
 
+    UpdateManager& um_;
+
     StatusCard   status_card_;
     EyesCard     eyes_card_;
     WifiCard     wifi_card_;
     NavTestCard  nav_card_;
     PromptCard   prompt_card_;
+    UpdatingCard updating_card_;
     CardStack    stack_;
 
     bool         prompt_visible_;
