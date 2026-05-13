@@ -12,7 +12,11 @@ enum CardId : uint8_t {
     CARD_EYES    = 1,
     CARD_WIFI    = 2,
     CARD_NAVTEST = 3,
-    CARD_COUNT   = 4,  // sentinel; not a real card
+    CARD_BUS_1   = 4,
+    CARD_BUS_2   = 5,
+    CARD_BUS_3   = 6,
+    CARD_BUS_4   = 7,
+    CARD_COUNT   = 8,  // sentinel; not a real card
 };
 
 constexpr uint8_t  MAX_DEVICE_NAME_LEN = 15;   // not counting null
@@ -28,6 +32,15 @@ constexpr uint8_t  FULL_LEVEL_MIN_PCT  = 1;
 constexpr uint8_t  FULL_LEVEL_MAX_PCT  = 100;
 constexpr uint32_t DAILY_TOKEN_CAP_MAX = 100000000u;  // 100M tokens, sanity ceiling
 
+constexpr uint8_t  MAX_BUS_STOPS       = 4;
+constexpr uint8_t  MAX_BUS_LABEL_LEN   = 12;   // not counting null
+constexpr uint8_t  BUS_STOP_CODE_LEN   = 5;    // Singapore stop codes are exactly 5 digits
+
+struct BusStopSlot {
+    char code[BUS_STOP_CODE_LEN + 1];   // "" = empty slot, disables card
+    char label[MAX_BUS_LABEL_LEN + 1];  // "" = renderer falls back to "Stop NNNNN"
+};
+
 struct Settings {
     char     device_name[MAX_DEVICE_NAME_LEN + 1];
     uint16_t live_timeout_s;
@@ -40,6 +53,7 @@ struct Settings {
     uint8_t  cards_order[CARD_COUNT];  // permutation; first cards_order_count entries valid
     uint8_t  cards_order_count;
     uint8_t  boot_card_id;
+    BusStopSlot bus_stops[MAX_BUS_STOPS];
 };
 
 // Populate s with defaults. default_name is copied (caller-supplied "Claude-XXXX").
@@ -81,6 +95,17 @@ bool applyBacklightFields(Settings& s,
 bool applyDailyCapField(Settings& s,
                         uint32_t daily_token_cap,
                         char* error, size_t error_len);
+
+// Patch a single bus stop slot. slot must be < MAX_BUS_STOPS.
+// code may be "" (clears the slot and auto-disables the corresponding card)
+// or exactly BUS_STOP_CODE_LEN ASCII digits. label may be empty or up to
+// MAX_BUS_LABEL_LEN printable ASCII chars. Returns true on success;
+// false leaves s unchanged and writes the reason into error.
+bool applyBusStopField(Settings& s,
+                       uint8_t slot,
+                       const char* code,
+                       const char* label,
+                       char* error, size_t error_len);
 
 // Render Settings as a single JSON object into buf. Returns the number of
 // chars written (excluding null), or 0 if buf_len is too small.
