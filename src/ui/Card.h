@@ -27,4 +27,12 @@ public:
 
     // Default: cards do not consume buttons, so the stack falls through to nav.
     bool handleButton(ButtonEvent /*ev*/, uint32_t /*now_ms*/) override { return false; }
+
+    // Lifecycle hooks. CardStack invokes onShow() when this card becomes
+    // the active one (push, pop revealing this card, setIndex, or
+    // pushOverlay onto this card), and onHide() on the reverse transition.
+    // Default no-op; cards that need to start/stop work on visibility
+    // (e.g. periodic network fetches) override these.
+    virtual void onShow() {}
+    virtual void onHide() {}
 };
