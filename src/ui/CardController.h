@@ -10,6 +10,7 @@
 #include "../net/WifiManager.h"
 #include "prompt_ui.h"
 #include "settings_model.h"
+#include "cards/BusCard.h"
 #include "cards/EyesCard.h"
 #include "cards/FactoryResetCard.h"
 #include "cards/NavTestCard.h"
@@ -68,6 +69,10 @@ private:
     PromptCard       prompt_card_;
     UpdatingCard     updating_card_;
     FactoryResetCard factory_reset_card_;
+    BusCard          bus_card_0_;
+    BusCard          bus_card_1_;
+    BusCard          bus_card_2_;
+    BusCard          bus_card_3_;
     CardStack        stack_;
 
     bool         prompt_visible_;

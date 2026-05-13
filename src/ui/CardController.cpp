@@ -26,6 +26,10 @@ CardController::CardController(AppState& app, EventBus& bus, WifiManager& wifi,
       prompt_card_(prompt),
       updating_card_(um),
       factory_reset_card_(fr),
+      bus_card_0_(0, settings, wifi),
+      bus_card_1_(1, settings, wifi),
+      bus_card_2_(2, settings, wifi),
+      bus_card_3_(3, settings, wifi),
       stack_(),
       prompt_visible_(false),
       last_cards_mask_(0),
@@ -69,7 +73,8 @@ void CardController::begin() {
 }
 
 namespace {
-Card* cardForId(uint8_t id, StatusCard& s, EyesCard& e, WifiCard& w, NavTestCard& n) {
+Card* cardForIdLegacy(uint8_t id, StatusCard& s, EyesCard& e,
+                      WifiCard& w, NavTestCard& n) {
     switch (id) {
         case settings::CARD_STATUS:  return &s;
         case settings::CARD_EYES:    return &e;
@@ -83,7 +88,6 @@ Card* cardForId(uint8_t id, StatusCard& s, EyesCard& e, WifiCard& w, NavTestCard
 void CardController::rebuildStack() {
     const settings::Settings& d = settings_.data();
 
-    // No-op if nothing card-related changed.
     if (last_cards_mask_         == d.cards_enabled_mask &&
         last_cards_order_count_  == d.cards_order_count &&
         last_boot_card_          == d.boot_card_id &&
@@ -92,26 +96,39 @@ void CardController::rebuildStack() {
         return;
     }
 
-    // Remember the old active card id (if any) so we can keep the user on
-    // the same card across edits when possible.
+    auto cardFor = [this, &d](uint8_t id) -> Card* {
+        Card* legacy = cardForIdLegacy(id, status_card_, eyes_card_,
+                                        wifi_card_, nav_card_);
+        if (legacy) return legacy;
+        if (id >= settings::CARD_BUS_1 && id <= settings::CARD_BUS_4) {
+            uint8_t slot = id - settings::CARD_BUS_1;
+            // Hide the card if its slot is empty even when the mask bit
+            // happens to be set (defence-in-depth alongside settings
+            // validation).
+            if (d.bus_stops[slot].code[0] == '\0') return nullptr;
+            switch (slot) {
+                case 0: return &bus_card_0_;
+                case 1: return &bus_card_1_;
+                case 2: return &bus_card_2_;
+                case 3: return &bus_card_3_;
+            }
+        }
+        return nullptr;
+    };
+
     Card* prev_active = stack_.active();
     uint8_t prev_id = 0xFF;
-    for (uint8_t i = 0; i < d.cards_order_count; ++i) {
-        Card* c = cardForId(last_cards_order_[i], status_card_, eyes_card_,
-                            wifi_card_, nav_card_);
+    for (uint8_t i = 0; i < last_cards_order_count_; ++i) {
+        Card* c = cardFor(last_cards_order_[i]);
         if (c == prev_active) { prev_id = last_cards_order_[i]; break; }
     }
 
     stack_.clear();
     for (uint8_t i = 0; i < d.cards_order_count; ++i) {
-        Card* c = cardForId(d.cards_order[i], status_card_, eyes_card_,
-                            wifi_card_, nav_card_);
+        Card* c = cardFor(d.cards_order[i]);
         if (c) stack_.addCard(c);
     }
 
-    // Pick the index: on first call, use boot_card_id; on later calls,
-    // try to keep the user on prev_id, else fall back to the boot card,
-    // else 0.
     uint8_t target_id = applied_boot_card_
         ? (prev_id != 0xFF ? prev_id : d.boot_card_id)
         : d.boot_card_id;
@@ -121,7 +138,6 @@ void CardController::rebuildStack() {
     }
     stack_.setIndex(target_index);
 
-    // Cache for the next diff.
     last_cards_mask_         = d.cards_enabled_mask;
     last_cards_order_count_  = d.cards_order_count;
     memcpy(last_cards_order_, d.cards_order, sizeof(last_cards_order_));
