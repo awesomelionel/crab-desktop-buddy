@@ -62,14 +62,17 @@ bool BusArrivalsFetcher::fetch(const char* code, uint32_t now_ms,
 
     // Read into a heap buffer with a hard cap. We can't stream-parse and
     // also enforce the size cap with the chunked path cleanly, so we
-    // accumulate into a bounded buffer.
+    // accumulate into a bounded buffer. Prefer PSRAM (ESP32-S3 has 8 MB)
+    // since internal SRAM is fragmented after Wi-Fi+TLS init and a 32 KB
+    // contiguous request often fails there.
     size_t cap = (body_len > 0)
         ? (size_t)body_len + 1
         : bus_arrivals::kMaxResponseBytes + 1;
     if (cap > bus_arrivals::kMaxResponseBytes + 1) {
         cap = bus_arrivals::kMaxResponseBytes + 1;
     }
-    char* buf = (char*)malloc(cap);
+    char* buf = (char*)ps_malloc(cap);
+    if (!buf) buf = (char*)malloc(cap);
     if (!buf) {
         setErr(out, "oom");
         http.end();
