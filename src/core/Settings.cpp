@@ -79,6 +79,18 @@ bool Settings::applyBacklight(uint16_t dim_timeout_s,
     return true;
 }
 
+bool Settings::applyDailyCap(uint32_t daily_token_cap,
+                             char* err, size_t err_len) {
+    settings::Settings next = data_;
+    if (!settings::applyDailyCapField(next, daily_token_cap, err, err_len)) {
+        return false;
+    }
+    data_ = next;
+    persist();
+    if (bus_) bus_->publish(EventKind::SettingsChanged);
+    return true;
+}
+
 void Settings::clearToDefaults(const char* default_name) {
     Preferences p;
     if (p.begin(NS, /*readOnly=*/false)) {

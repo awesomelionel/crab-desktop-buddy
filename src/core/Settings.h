@@ -42,6 +42,10 @@ public:
                         uint8_t  full_level_pct,
                         char* err, size_t err_len);
 
+    // Applies a daily-token-cap update.
+    bool applyDailyCap(uint32_t daily_token_cap,
+                       char* err, size_t err_len);
+
     // Wipe NVS settings namespace and reset to defaults seeded with
     // default_name. Wi-Fi creds (in a separate namespace) are untouched.
     void clearToDefaults(const char* default_name);
