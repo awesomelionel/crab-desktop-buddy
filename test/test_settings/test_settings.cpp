@@ -44,6 +44,7 @@ void test_apply_bus_stop_label_with_control_char_rejected(void);
 void test_apply_bus_stop_slot_out_of_range_rejected(void);
 void test_validate_accepts_default_settings(void);
 void test_validate_rejects_card_enabled_with_empty_code(void);
+void test_apply_bus_stop_clear_when_only_bus_card_enabled_rejected(void);
 
 using namespace settings;
 
@@ -244,5 +245,6 @@ int main(int /*argc*/, char** /*argv*/) {
     RUN_TEST(test_apply_bus_stop_slot_out_of_range_rejected);
     RUN_TEST(test_validate_accepts_default_settings);
     RUN_TEST(test_validate_rejects_card_enabled_with_empty_code);
+    RUN_TEST(test_apply_bus_stop_clear_when_only_bus_card_enabled_rejected);
     return UNITY_END();
 }

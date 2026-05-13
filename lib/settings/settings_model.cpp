@@ -335,6 +335,14 @@ bool applyBusStopField(Settings& s,
     }
 
     if (clearing) {
+        const uint8_t card_id = (uint8_t)(CARD_BUS_1 + slot);
+        if (s.cards_enabled_mask == (uint8_t)(1u << card_id)) {
+            writeError(error, error_len, "at least one card must be enabled");
+            return false;
+        }
+    }
+
+    if (clearing) {
         s.bus_stops[slot].code[0]  = '\0';
         s.bus_stops[slot].label[0] = '\0';
         const uint8_t card_id = (uint8_t)(CARD_BUS_1 + slot);

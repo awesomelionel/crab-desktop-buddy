@@ -106,3 +106,23 @@ void test_validate_rejects_card_enabled_with_empty_code(void) {
     TEST_ASSERT_FALSE(validate(s, err, sizeof(err)));
     TEST_ASSERT_TRUE(strstr(err, "bus") != nullptr);
 }
+
+void test_apply_bus_stop_clear_when_only_bus_card_enabled_rejected(void) {
+    Settings s = make_defaults_bus();
+    char err[64] = {};
+    // First set up slot 0 with a valid stop and make the corresponding card
+    // the only enabled card.
+    TEST_ASSERT_TRUE(applyBusStopField(s, 0, "50171", "Home",
+                                       err, sizeof(err)));
+    s.cards_enabled_mask = (uint8_t)(1u << CARD_BUS_1);
+    s.cards_order[0]     = CARD_BUS_1;
+    s.cards_order_count  = 1;
+    s.boot_card_id       = CARD_BUS_1;
+    // Now attempting to clear slot 0 must fail and leave s unchanged.
+    TEST_ASSERT_FALSE(applyBusStopField(s, 0, "", "",
+                                        err, sizeof(err)));
+    TEST_ASSERT_EQUAL_STRING("50171", s.bus_stops[0].code);
+    TEST_ASSERT_EQUAL_UINT8((uint8_t)(1u << CARD_BUS_1),
+                            s.cards_enabled_mask);
+    TEST_ASSERT_TRUE(strstr(err, "enabled") != nullptr);
+}
