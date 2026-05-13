@@ -34,11 +34,14 @@ step "GET /api/networks (after a brief wait)"
 sleep 3
 curl -fsS "$BASE/api/networks" | jq .
 
-step "POST /api/settings/device (rename to 'smoketest', live=30, sleep=0)"
+step "POST /api/settings/device (rename to 'smoketest', live=30, sleep=0, dim=60)"
 curl -fsS -X POST "$BASE/api/settings/device" \
   --data-urlencode "name=smoketest" \
   --data-urlencode "live_timeout_s=30" \
-  --data-urlencode "sleep_timeout_s=0" | jq .
+  --data-urlencode "sleep_timeout_s=0" \
+  --data-urlencode "dim_timeout_s=60" \
+  --data-urlencode "dim_level_pct=25" \
+  --data-urlencode "full_level_pct=100" | jq .
 
 step "POST /api/settings/cards (default order: status, eyes, wifi)"
 curl -fsS -X POST "$BASE/api/settings/cards" \

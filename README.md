@@ -1,110 +1,243 @@
-# claude-buddy
+# desktop-buddy
 
-A minimal ESP32-S3 firmware for the [Adafruit Feather ESP32-S3 Reverse TFT](https://www.adafruit.com/product/5691) that connects to Claude Desktop over BLE and displays live session state on the built-in 1.14" TFT display.
-
-This is a ground-up rewrite. See `cdb/REFERENCE.md` for the wire protocol; `cdb/` is the reference implementation.
+ESP32-S3 firmware for the [Adafruit Feather ESP32-S3 Reverse TFT](https://www.adafruit.com/product/5691). It connects to Claude Desktop over BLE, shows live session state on the built-in TFT, lets you approve or deny permission prompts from the device, and exposes a local Web UI for Wi-Fi, settings, OTA updates, and reset actions.
 
 ## Features
 
-### Display
-- **4-state visual indicator** — shows `DISCONNECTED`, `IDLE`, `WORKING`, or `WAITING` in large centered text
-- **Session counters** — total / running / waiting session counts updated in real-time
-- **Status message** — last one-line summary from Claude Desktop (e.g. `approve: Bash`), auto-wrapped across 2 lines
-- **Connection footer** — green `LIVE` / red `OFFLINE` badge with device name, based on heartbeat keepalive
+### Claude Session Display
 
-### BLE / Connectivity
-- **Nordic UART Service (NUS)** bridge — standard BLE UART profile for broad host compatibility
-- **Auto-advertising** — device advertises as `Claude-XXXX` (MAC-derived suffix) on boot and after disconnect
-- **Auto-reconnect** — restarts advertising automatically on BLE disconnect
-- **4 KB ring + line buffers** — handles max event payloads and MTU fragmentation cleanly
-- **30-second offline detection** — transitions to `OFFLINE` if no snapshot received within timeout
+- **Card carousel** navigated by the onboard buttons.
+- **Status card** with Claude state, total/running/waiting counts, latest message, usage percentage/bar, battery, and live/offline footer.
+- **Animated eyes card** for `DISCONNECTED`, `IDLE`, `WORKING`, `WAITING`, and completion feedback.
+- **Wi-Fi card** with current connection state, device URL, and QR code.
+- **Prompt overlay** that takes over when Claude Desktop is waiting on a permission decision.
 
 ### Permission Prompts
-When Claude Desktop blocks on a permission decision (`prompt` field present in a snapshot), the device switches to a full-screen decision UI:
 
-- **Three options, vertical stack:** `Approve` (top, default highlight) / `Deny` / `Dismiss`.
-- **Three onboard buttons** drive the UI — only active while a prompt is on screen:
-  - **Up (D2)** / **Down (D0)** — move highlight, no wrap-around.
-  - **Center (D1)** — confirm the highlighted option.
-- **Approve / Deny** send `{"cmd":"permission","id":"...","decision":"once"|"deny"}` over the BLE TX characteristic. **Dismiss** sends nothing — it just clears the prompt UI locally.
-- **`SENT: APPROVE` / `SENT: DENY` / `DISMISSED`** flashes for ~500 ms after a press, then the prompt UI hides.
-- **Sticky dismiss:** once a prompt id is dismissed, the UI does not re-appear for that same id even if the desktop keeps sending it. A *new* prompt id will show again.
-- **Auto-dismiss:** if the next snapshot drops the `prompt` field (someone decided elsewhere) or the link goes `OFFLINE`, the prompt UI clears immediately. Any in-flight press is discarded.
-- **Footer preserved:** the `LIVE` / `OFFLINE` badge and device name remain visible on the prompt screen so connection state is never hidden.
+When Claude Desktop sends a snapshot with a `prompt`, the device shows a decision UI:
 
-#### Edge cases / callouts
+- **Approve** sends `{"cmd":"permission","id":"...","decision":"once"}`.
+- **Deny** sends `{"cmd":"permission","id":"...","decision":"deny"}`.
+- **Dismiss** hides the prompt locally without sending a decision.
+- Dismissed prompt ids stay collapsed so the same prompt does not keep taking over the screen.
+- If the prompt disappears or the BLE link goes offline, the device clears the prompt UI.
 
-- **Press-then-disconnect race.** If the user presses a decision and the link drops within the same loop tick, the BLE write fails and the response is silently dropped. The desktop's session manager will re-prompt on the next snapshot — no retry on the device.
-- **No decision queueing.** Only one outgoing decision can be pending at a time. A second press before the first is drained overwrites it; in practice the 20 ms loop tick drains it long before another press is possible.
-- **Buttons inert outside an active prompt.** Presses while no prompt is on screen (or while the prompt is dismissed) are ignored.
+### BLE / Claude Desktop
 
-### Session State Monitoring
-Receives and parses newline-delimited JSON snapshots from Claude Desktop containing:
-- Running / waiting / total session counts
-- One-line status message
-- Cumulative and daily output token counts
-- Recent transcript lines
-- 10-second heartbeat keepalive
+- Nordic UART Service (NUS) BLE bridge.
+- Advertises as a MAC-derived `Claude-XXXX` device.
+- Re-advertises automatically after disconnects.
+- Handles MTU fragmentation and newline-delimited JSON snapshots.
+- Uses a configurable heartbeat timeout to mark Claude as offline.
 
-### State Machine
-| State | Condition |
-|---|---|
-| `DISCONNECTED` | No BLE connection or heartbeat timeout |
-| `IDLE` | Connected, no active or waiting sessions |
-| `WORKING` | One or more sessions generating responses |
-| `WAITING` | One or more sessions blocked on a permission prompt (takes priority over `WORKING`) |
+### Wi-Fi + Web UI
 
-### Protocol Parsing
-- ArduinoJson 7-based parser with partial-update support — missing fields preserve previous state
-- Malformed or non-JSON lines silently ignored
-- Message strings truncated to 32-byte fixed buffer to keep RAM usage bounded
+The device hosts a local Web UI:
 
-### Testing
-- Unity-based host test suite (`pio test -e native`)
-- 5 protocol parser tests: full snapshot, partial update, validation, error handling, truncation
-- 6 state derivation tests: all four states + name mappings
+- In station mode: `http://<device-ip>/`
+- In first-run or forgotten-Wi-Fi mode: open AP `claude-buddy-XXXX`, captive portal at `http://192.168.4.1/`
+
+From the Web UI you can:
+
+- Change device name.
+- Adjust Claude live timeout.
+- Configure screen sleep, dim timeout, dim brightness, and full brightness.
+- Enable, disable, order, and choose the boot card.
+- Scan and save Wi-Fi credentials.
+- Reboot, reset settings, or forget Wi-Fi.
+- Check for and install firmware updates from GitHub Releases.
+- Arm a factory reset that must be confirmed on-device.
+
+### OTA Updates
+
+- Manual pull-based updates from GitHub Releases.
+- Checks `https://api.github.com/repos/awesomelionel/desktop-buddy/releases/latest`.
+- Installs the release asset named `firmware.bin`.
+- Uses TLS validation and streams the GitHub asset directly into the inactive OTA partition.
+- Marks successful boots valid with ESP32 OTA rollback support.
+- Shows install progress on both the Web UI and an on-device update card.
+
+Release tags should use `vMAJOR.MINOR.PATCH`, for example `v0.1.5`. CI builds tagged releases and uploads `firmware.bin`.
+
+### Factory Reset
+
+- Web UI **Factory reset** arms a 30-second confirmation window.
+- The device shows a full-screen confirmation card.
+- Holding the center button for 3 seconds wipes Wi-Fi credentials and settings, then reboots.
+- Holding center for 5 seconds outside that armed flow still forgets Wi-Fi as a recovery path.
+
+### Hardware Support
+
+- MAX17048 battery gauge polling with battery percentage and charging state in the footer.
+- Backlight dim/off behavior based on input and activity.
+- Three onboard buttons:
+  - D2: previous/up
+  - D0 / BOOT: next/down
+  - D1: center/select
 
 ## Hardware
 
 | Component | Part |
 |---|---|
 | MCU + display | Adafruit Feather ESP32-S3 Reverse TFT (#5691) |
-| Display | 1.14" ST7789 TFT, 135×240 px |
-| Input | 3 onboard buttons — D2 (up), D0 (down), D1 (center) |
+| Display | 1.14" ST7789 TFT, 135x240 px |
+| Battery gauge | MAX17048 |
+| Input | 3 onboard buttons: D2, D0, D1 |
 
 ## Build & Flash
 
+Install PlatformIO, then build and upload:
+
 ```sh
 pio run -e adafruit_feather_esp32s3_reversetft -t upload
-pio device monitor
+pio device monitor -b 115200
 ```
 
-## Run Host Tests
+If `pio` is not on PATH but PlatformIO is installed in its default location (`~/.platformio` on macOS/Linux, `%USERPROFILE%\.platformio` on Windows):
+
+```sh
+"$HOME/.platformio/penv/bin/pio" run -e adafruit_feather_esp32s3_reversetft -t upload
+"$HOME/.platformio/penv/bin/pio" device monitor -b 115200
+```
+
+On Windows (PowerShell), use:
+
+```powershell
+& "$env:USERPROFILE\.platformio\penv\Scripts\pio.exe" run -e adafruit_feather_esp32s3_reversetft -t upload
+& "$env:USERPROFILE\.platformio\penv\Scripts\pio.exe" device monitor -b 115200
+```
+
+## Pair with Claude Desktop
+
+1. In Claude Desktop, enable developer mode from **Help -> Troubleshooting -> Enable Developer Mode**.
+2. Open **Developer -> Open Hardware Buddy...**.
+3. Click **Connect** and select `Claude-XXXX`.
+
+After pairing, the device advertises again after disconnects and Claude Desktop can reconnect in the background.
+
+## First-Time Wi-Fi Setup
+
+1. Flash the firmware.
+2. Join the open Wi-Fi network named `claude-buddy-XXXX`.
+3. Open `http://192.168.4.1/` if the captive portal does not open automatically.
+4. Pick your Wi-Fi network, enter the password, and save.
+5. The device reboots and shows its LAN URL on the Wi-Fi card.
+
+## OTA Test Flow
+
+After the OTA-capable firmware has been flashed once over USB:
+
+1. Create/push a GitHub release tag such as `v0.1.6`.
+2. Confirm the release has a `firmware.bin` asset.
+3. Open the device Web UI.
+4. Click **Check for updates**.
+5. Click **Install update**.
+6. Watch the device reboot and verify the new firmware version in the Web UI or serial monitor.
+
+Useful serial logs:
+
+```text
+[ota] resolving https://github.com/...
+[ota] probe code=302
+[ota] redirect -> https://release-assets.githubusercontent.com/...
+[ota] download code=200 len=...
+[ota] install OK; rebooting
+```
+
+If installation fails, the Web UI reports the latest OTA error string, such as `probe http 403`, `download http 404`, `no content length`, or `bad firmware header`.
+
+## Web API
+
+Key endpoints served in station mode:
+
+| Endpoint | Method | Purpose |
+|---|---:|---|
+| `/api/status` | GET | Wi-Fi, uptime, device name, live state, Claude counters/message |
+| `/api/settings` | GET | Current persisted settings |
+| `/api/settings/device` | POST | Device name, live timeout, sleep/dim/backlight levels |
+| `/api/settings/cards` | POST | Enabled cards, card order, boot card |
+| `/api/settings/network` | POST | Save Wi-Fi credentials and reboot |
+| `/api/networks` | GET | Wi-Fi scan results |
+| `/api/scan` | POST | Start Wi-Fi scan |
+| `/api/firmware-version` | GET | Current firmware version |
+| `/api/check-for-updates` | POST | Fetch latest GitHub release metadata |
+| `/api/update-status` | GET | OTA state, versions, release notes, progress, last error |
+| `/api/install-update` | POST | Start OTA install |
+| `/api/factory-reset` | POST | Arm on-device factory reset confirmation |
+| `/api/actions/reboot` | POST | Reboot |
+| `/api/actions/reset-settings` | POST | Reset settings namespace and reboot |
+| `/api/actions/forget-wifi` | POST | Clear Wi-Fi credentials and reboot |
+
+## Protocol
+
+Claude Desktop sends newline-delimited JSON snapshots over BLE. The parser accepts partial updates and preserves missing fields.
+
+Important fields:
+
+- `total`, `running`, `waiting`
+- `msg`
+- `tokens_today` as the legacy daily-token display fallback
+- optional `usage` object with `used`, `remaining`, and/or `limit` for the Status card usage bar
+- `prompt`
+- heartbeat snapshots used for live/offline state
+
+Malformed or non-JSON lines are ignored. Fixed-size buffers bound RAM usage on the device.
+
+## Run Tests
+
+Host-side Unity tests live under `test/`:
 
 ```sh
 pio test -e native
 ```
 
-## Pair with Claude Desktop
+The ESP32 firmware build is the main integration check:
 
-1. Claude → **Help → Troubleshooting → Enable Developer Mode**
-2. Developer → **Open Hardware Buddy…**
-3. Click **Connect**, select `Claude-XXXX` from the list
+```sh
+pio run -e adafruit_feather_esp32s3_reversetft
+```
 
-Once paired, the device reconnects automatically in the background on subsequent launches.
+There is also a Web smoke script for a running device:
+
+```sh
+DEVICE_HOST=<device-ip> ./tools/web-smoke.sh
+```
 
 ## Code Structure
 
-```
+```text
 src/
-├── main.cpp          # Main loop: TFT rendering, BLE line accumulation
-└── ble_bridge.cpp/h  # BLE init, NUS service, RX ring buffer, callbacks
+  main.cpp                         boot, main loop, wiring
+  ble_bridge.*                     BLE NUS bridge
+  core/
+    AppState.*                     shared runtime state
+    ConfigStore.*                  Wi-Fi credential storage
+    Settings.*                     persisted user settings
+    UpdateManager.*                GitHub release check + OTA install
+    FactoryResetCoordinator.*      web-armed hold-to-confirm reset
+  net/
+    WifiManager.*                  STA/AP Wi-Fi state machine
+    HttpServer.*                   Web UI + JSON API
+    GitHubReleases.*               GitHub releases HTTPS client
+  ui/
+    CardController.*               card carousel, overlays, backlight
+    cards/                         status, eyes, Wi-Fi, OTA, reset cards
+  hal/
+    Battery.*                      MAX17048 polling
+  input/
+    InputRouter.*                  button routing and long holds
 
 lib/
-├── protocol/         # JSON parser → ClaudeStatus struct
-└── state/            # 4-state enum + derivation logic
+  protocol/                        Claude snapshot parser
+  state/                           Claude state derivation
+  prompt_ui/                       prompt decision state machine
+  settings/                        settings model + validation
+  version_compare/                 semver comparison
+  github_releases_parse/           GitHub release JSON parser
+  factory_reset_state/             pure reset confirmation state machine
+  backlight/                       dim/off logic
+  buttons/                         button helpers
 
 test/
-├── test_protocol/    # Parser unit tests
-└── test_state/       # State machine unit tests
+  test_*                           Unity tests for pure libraries
 ```

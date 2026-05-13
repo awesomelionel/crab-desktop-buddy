@@ -161,6 +161,70 @@ static void test_parse_tokens_today_malformed_keeps_previous(void) {
     TEST_ASSERT_EQUAL_UINT32(7777u, s.tokens_today);
 }
 
+static void test_parse_usage_used_and_remaining(void) {
+    ClaudeStatus s = {};
+    bool ok = protocol_parse_line(
+        "{\"total\":1,\"usage\":{\"used\":12400,\"remaining\":87600}}", &s);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_TRUE(s.usage.valid);
+    TEST_ASSERT_EQUAL_UINT32(12400u, s.usage.used);
+    TEST_ASSERT_EQUAL_UINT32(87600u, s.usage.remaining);
+    TEST_ASSERT_TRUE(s.usage.has_remaining);
+    TEST_ASSERT_FALSE(s.usage.has_limit);
+}
+
+static void test_parse_usage_limit_computes_remaining(void) {
+    ClaudeStatus s = {};
+    bool ok = protocol_parse_line(
+        "{\"total\":1,\"usage\":{\"used\":25000,\"limit\":100000}}", &s);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_TRUE(s.usage.valid);
+    TEST_ASSERT_EQUAL_UINT32(25000u, s.usage.used);
+    TEST_ASSERT_EQUAL_UINT32(75000u, s.usage.remaining);
+    TEST_ASSERT_FALSE(s.usage.has_remaining);
+    TEST_ASSERT_TRUE(s.usage.has_limit);
+}
+
+static void test_parse_usage_zero_remaining_is_honoured(void) {
+    ClaudeStatus s = {};
+    s.usage.remaining = 100;
+    s.usage.has_remaining = true;
+    s.usage.valid = true;
+    bool ok = protocol_parse_line(
+        "{\"total\":1,\"usage\":{\"used\":100000,\"remaining\":0}}", &s);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_TRUE(s.usage.valid);
+    TEST_ASSERT_EQUAL_UINT32(100000u, s.usage.used);
+    TEST_ASSERT_EQUAL_UINT32(0u, s.usage.remaining);
+}
+
+static void test_parse_usage_missing_keeps_previous(void) {
+    ClaudeStatus s = {};
+    s.usage.valid = true;
+    s.usage.used = 11;
+    s.usage.remaining = 22;
+    s.usage.has_remaining = true;
+    bool ok = protocol_parse_line("{\"total\":1,\"running\":0}", &s);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_TRUE(s.usage.valid);
+    TEST_ASSERT_EQUAL_UINT32(11u, s.usage.used);
+    TEST_ASSERT_EQUAL_UINT32(22u, s.usage.remaining);
+}
+
+static void test_parse_usage_malformed_remaining_keeps_previous(void) {
+    ClaudeStatus s = {};
+    s.usage.valid = true;
+    s.usage.used = 1000;
+    s.usage.remaining = 9000;
+    s.usage.has_remaining = true;
+    bool ok = protocol_parse_line(
+        "{\"total\":1,\"usage\":{\"used\":2000,\"remaining\":\"bad\"}}", &s);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_TRUE(s.usage.valid);
+    TEST_ASSERT_EQUAL_UINT32(2000u, s.usage.used);
+    TEST_ASSERT_EQUAL_UINT32(9000u, s.usage.remaining);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_parse_full_snapshot);
@@ -179,5 +243,10 @@ int main(int, char**) {
     RUN_TEST(test_parse_tokens_today_missing_keeps_previous);
     RUN_TEST(test_parse_tokens_today_zero_is_honoured);
     RUN_TEST(test_parse_tokens_today_malformed_keeps_previous);
+    RUN_TEST(test_parse_usage_used_and_remaining);
+    RUN_TEST(test_parse_usage_limit_computes_remaining);
+    RUN_TEST(test_parse_usage_zero_remaining_is_honoured);
+    RUN_TEST(test_parse_usage_missing_keeps_previous);
+    RUN_TEST(test_parse_usage_malformed_remaining_keeps_previous);
     return UNITY_END();
 }

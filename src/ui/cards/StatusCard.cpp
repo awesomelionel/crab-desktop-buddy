@@ -13,6 +13,45 @@ namespace {
 // rate. Slow enough that it doesn't feel jittery on the small
 // 4-bar icon, fast enough that it reads as motion.
 constexpr uint32_t kChargeAnimMs = 600;
+
+constexpr int kUsageX = 8;
+constexpr int kUsageY = 69;
+constexpr int kUsageW = 224;
+constexpr int kUsageH = 33;
+constexpr int kUsageBarX = 8;
+constexpr int kUsageBarY = 85;
+constexpr int kUsageBarW = 224;
+constexpr int kUsageBarH = 8;
+constexpr int kMsgLegacyY = 92;
+constexpr int kMsgUsageY = 104;
+
+uint8_t usagePercent(const ClaudeUsage& usage) {
+    uint64_t denom = (uint64_t)usage.used + usage.remaining;
+    if (denom == 0 && usage.has_limit) denom = usage.limit;
+    if (denom == 0) return 0;
+    uint64_t pct = ((uint64_t)usage.used * 100u + (denom / 2u)) / denom;
+    if (pct > 100u) pct = 100u;
+    return (uint8_t)pct;
+}
+
+uint16_t usageBarColor(uint8_t pct) {
+    if (pct >= 90) return ST77XX_RED;
+    if (pct >= 70) return ST77XX_YELLOW;
+    if (pct >= 45) return 0xFD20;  // orange
+    return ST77XX_CYAN;
+}
+
+void drawUsageBar(Adafruit_ST7789& tft, uint8_t pct) {
+    tft.drawRect(kUsageBarX, kUsageBarY, kUsageBarW, kUsageBarH, 0x39E7);
+    tft.fillRect(kUsageBarX + 1, kUsageBarY + 1,
+                 kUsageBarW - 2, kUsageBarH - 2, 0x2124);
+
+    int fill_w = ((kUsageBarW - 2) * pct) / 100;
+    if (fill_w > 0) {
+        tft.fillRect(kUsageBarX + 1, kUsageBarY + 1,
+                     fill_w, kUsageBarH - 2, usageBarColor(pct));
+    }
+}
 }  // namespace
 
 StatusCard::StatusCard(const AppState& state, PromptUi& prompt)
@@ -28,6 +67,10 @@ StatusCard::StatusCard(const AppState& state, PromptUi& prompt)
       last_drawn_live_(false),
       last_recheck_ms_(0),
       last_drawn_tokens_today_(0xFFFFFFFFu),
+      last_drawn_usage_valid_(false),
+      last_drawn_usage_used_(0xFFFFFFFFu),
+      last_drawn_usage_remaining_(0xFFFFFFFFu),
+      last_drawn_usage_pct_(0xFF),
       last_drawn_battery_pct_(0xFE),       // sentinel != 0xFF (unsampled)
       last_drawn_battery_charging_(false),
       last_drawn_battery_present_(false),
@@ -82,6 +125,11 @@ bool StatusCard::isDirty() const {
     if (status.waiting != last_drawn_waiting_) return true;
     if (status.valid   != last_drawn_valid_)   return true;
     if (status.tokens_today != last_drawn_tokens_today_) return true;
+    const uint8_t pct = status.usage.valid ? usagePercent(status.usage) : 0;
+    if (status.usage.valid      != last_drawn_usage_valid_)     return true;
+    if (status.usage.used       != last_drawn_usage_used_)      return true;
+    if (status.usage.remaining  != last_drawn_usage_remaining_) return true;
+    if (status.usage.valid && pct != last_drawn_usage_pct_)     return true;
     if (strncmp(last_drawn_msg_, status.msg, sizeof(last_drawn_msg_)) != 0) return true;
     if (state_.isLive(millis()) != last_drawn_live_) return true;
     const BatteryStatus& bat = state_.battery();
@@ -145,18 +193,44 @@ void StatusCard::render(Display& display) {
                    status.total, status.running, status.waiting);
     }
 
-    // Daily token count line (size 2, white, centred at y=70 .. 85).
-    // Hidden until status.valid flips true. Repaint when valid flips OR
-    // when tokens_today changes. Erase as a 240×17 strip so the
-    // previous (potentially differently-centred) line can't ghost.
+    // Usage strip. Newer bridge snapshots can provide quota usage, in
+    // which case this draws a percentage + bar + remaining amount.
+    // Legacy snapshots fall back to the old daily-token line.
+    const uint8_t usage_pct = status.usage.valid ? usagePercent(status.usage) : 0;
     const bool token_changed = state_changed ||
                                (last_drawn_valid_         != status.valid) ||
-                               (last_drawn_tokens_today_  != status.tokens_today);
+                               (last_drawn_tokens_today_  != status.tokens_today) ||
+                               (last_drawn_usage_valid_   != status.usage.valid) ||
+                               (last_drawn_usage_used_    != status.usage.used) ||
+                               (last_drawn_usage_remaining_ != status.usage.remaining) ||
+                               (status.usage.valid && last_drawn_usage_pct_ != usage_pct);
     if (token_changed) {
         if (!state_changed) {
-            tft.fillRect(0, 70, 240, 17, ST77XX_BLACK);
+            tft.fillRect(0, 70, 240, 46, ST77XX_BLACK);
         }
-        if (status.valid) {
+        if (status.usage.valid) {
+            char left_buf[kFormatTokenCountBufLen];
+            format_token_count(status.usage.remaining, left_buf, sizeof(left_buf));
+
+            char pct_line[16];
+            snprintf(pct_line, sizeof(pct_line), "%u%% used", usage_pct);
+            char left_line[20];
+            snprintf(left_line, sizeof(left_line), "%s left", left_buf);
+
+            tft.setTextSize(2);
+            tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+            tft.setCursor(kUsageX, kUsageY);
+            tft.print(pct_line);
+
+            tft.setTextSize(1);
+            tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+            int16_t lx1, ly1; uint16_t lw, lh;
+            tft.getTextBounds(left_line, 0, 0, &lx1, &ly1, &lw, &lh);
+            tft.setCursor(display.width() - 8 - (int)lw, 75);
+            tft.print(left_line);
+
+            drawUsageBar(tft, usage_pct);
+        } else if (status.valid) {
             char tok_buf[kFormatTokenCountBufLen];
             format_token_count(status.tokens_today, tok_buf, sizeof(tok_buf));
             char tok_line[32];
@@ -180,7 +254,8 @@ void StatusCard::render(Display& display) {
     const bool collapsed = (prompt_.mode == PROMPT_UI_COLLAPSED);
     const bool msg_changed = state_changed ||
                              (strncmp(last_drawn_msg_, status.msg,
-                                      sizeof(last_drawn_msg_)) != 0);
+                                      sizeof(last_drawn_msg_)) != 0) ||
+                             (last_drawn_usage_valid_ != status.usage.valid);
     const bool prompt_changed = state_changed ||
                                 (collapsed != last_drawn_prompt_collapsed_) ||
                                 (collapsed && strncmp(last_drawn_prompt_tool_,
@@ -188,7 +263,14 @@ void StatusCard::render(Display& display) {
                                                       sizeof(last_drawn_prompt_tool_)) != 0);
     if (msg_changed || prompt_changed) {
         if (!state_changed) {
-            tft.fillRect(0, 92, 240, 24, ST77XX_BLACK);
+            if (status.usage.valid && collapsed) {
+                tft.fillRect(0, ui::kPromptBadgeEraseY, 240,
+                             ui::kPromptBadgeEraseH, ST77XX_BLACK);
+            } else if (status.usage.valid) {
+                tft.fillRect(0, 102, 240, 14, ST77XX_BLACK);
+            } else {
+                tft.fillRect(0, 92, 240, 24, ST77XX_BLACK);
+            }
         }
         if (collapsed) {
             ui::drawPromptBadge(tft, prompt_.tool);
@@ -196,9 +278,10 @@ void StatusCard::render(Display& display) {
             tft.setTextSize(1);
             tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
             if (status.msg[0]) {
-                tft.setCursor(8, 92);
+                const int msg_y = status.usage.valid ? kMsgUsageY : kMsgLegacyY;
+                tft.setCursor(8, msg_y);
                 tft.printf("%.34s", status.msg);
-                if (strlen(status.msg) > 34) {
+                if (!status.usage.valid && strlen(status.msg) > 34) {
                     tft.setCursor(8, 104);
                     tft.printf("%.34s", status.msg + 34);
                 }
@@ -253,6 +336,10 @@ void StatusCard::render(Display& display) {
     last_drawn_msg_[sizeof(last_drawn_msg_) - 1] = 0;
     last_drawn_live_              = live;
     last_drawn_tokens_today_      = status.tokens_today;
+    last_drawn_usage_valid_       = status.usage.valid;
+    last_drawn_usage_used_        = status.usage.used;
+    last_drawn_usage_remaining_   = status.usage.remaining;
+    last_drawn_usage_pct_         = usage_pct;
     last_drawn_battery_present_   = bat.present;
     last_drawn_battery_pct_       = bat.percent;
     last_drawn_battery_charging_  = bat.charging;

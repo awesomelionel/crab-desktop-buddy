@@ -9,6 +9,15 @@ struct ClaudePrompt {
     char hint[64];
 };
 
+struct ClaudeUsage {
+    bool     valid;
+    uint32_t used;
+    uint32_t remaining;
+    uint32_t limit;
+    bool     has_remaining;
+    bool     has_limit;
+};
+
 struct ClaudeStatus {
     uint8_t      total;
     uint8_t      running;
@@ -17,6 +26,7 @@ struct ClaudeStatus {
     bool         valid;        // true once at least one snapshot has parsed
     ClaudePrompt prompt;
     uint32_t     tokens_today; // output tokens since local midnight (from bridge)
+    ClaudeUsage  usage;        // optional quota usage from bridge
 };
 
 // Parse one newline-stripped JSON object from the bridge into `out`.

@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Usage Status Card Preview</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --page: #191a1d;
+    --screen: #050505;
+    --text: #f6f1ff;
+    --muted: #a7a2b4;
+    --cyan: #41d9ff;
+    --live: #41ff9a;
+    --offline: #ff4d5c;
+    --bar-bg: #3a2c46;
+    --bar-fill: #ff704f;
+    --bar-fill-high: #ff4d5c;
+    --bar-fill-mid: #ffc857;
+    --bar-fill-low: #41d9ff;
+    --frame: #ece7dc;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    gap: 24px;
+    padding: 28px;
+    background: radial-gradient(circle at 50% 0%, #2a2d33 0, var(--page) 56%);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  .stage {
+    display: grid;
+    gap: 18px;
+    justify-items: center;
+  }
+
+  .device {
+    width: 336px;
+    padding: 18px;
+    border-radius: 34px;
+    background: var(--frame);
+    box-shadow:
+      inset 0 0 0 2px rgba(0, 0, 0, .06),
+      0 22px 70px rgba(0, 0, 0, .42);
+  }
+
+  .bezel {
+    padding: 10px;
+    border-radius: 24px;
+    background: #0b0b0c;
+  }
+
+  .screen {
+    width: 240px;
+    height: 135px;
+    margin: 0 auto;
+    position: relative;
+    overflow: hidden;
+    background: var(--screen);
+    color: var(--text);
+    image-rendering: pixelated;
+    box-shadow: 0 0 0 1px #111;
+  }
+
+  .title {
+    position: absolute;
+    inset-inline: 0;
+    top: 17px;
+    text-align: center;
+    font-size: 28px;
+    line-height: 1;
+    font-weight: 800;
+    letter-spacing: 0;
+  }
+
+  .counters {
+    position: absolute;
+    left: 8px;
+    top: 58px;
+    color: var(--cyan);
+    font-size: 10px;
+    line-height: 1;
+    white-space: pre;
+  }
+
+  .usage {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    top: 69px;
+    height: 35px;
+  }
+
+  .usage-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    height: 16px;
+    line-height: 1;
+  }
+
+  .pct {
+    font-size: 18px;
+    font-weight: 800;
+  }
+
+  .left {
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .bar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 2px;
+    height: 9px;
+    background: var(--bar-bg);
+    border: 1px solid #4c3c5d;
+  }
+
+  .fill {
+    height: 100%;
+    width: 50%;
+    background: var(--bar-fill);
+  }
+
+  .msg {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    top: 105px;
+    height: 10px;
+    overflow: hidden;
+    color: var(--text);
+    font-size: 9px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .footer {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    top: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 8px;
+    line-height: 1;
+  }
+
+  .live {
+    color: var(--live);
+  }
+
+  .battery {
+    width: 20px;
+    height: 10px;
+    border: 2px solid var(--text);
+    position: relative;
+  }
+
+  .battery::after {
+    content: "";
+    position: absolute;
+    right: -5px;
+    top: 2px;
+    width: 3px;
+    height: 4px;
+    background: var(--text);
+  }
+
+  .battery span {
+    display: block;
+    height: 100%;
+    width: 75%;
+    background: var(--text);
+  }
+
+  .controls {
+    width: min(520px, 100%);
+    display: grid;
+    grid-template-columns: 1fr 96px;
+    gap: 12px;
+    align-items: center;
+    color: #ececf3;
+    font: 14px system-ui, sans-serif;
+  }
+
+  input[type="range"] {
+    width: 100%;
+  }
+
+  output {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  @media (max-width: 520px) {
+    .device {
+      width: 312px;
+      padding: 14px;
+    }
+  }
+</style>
+
+<main class="stage">
+  <div class="device" aria-label="Device preview">
+    <div class="bezel">
+      <section class="screen">
+        <div class="title">WORKING</div>
+        <div class="counters">total 3  run 1  wait 0</div>
+
+        <div class="usage">
+          <div class="usage-head">
+            <div class="pct" id="pct">50% used</div>
+            <div class="left" id="left">50K left</div>
+          </div>
+          <div class="bar"><div class="fill" id="fill"></div></div>
+        </div>
+
+        <div class="msg">approve: Bash</div>
+        <div class="footer">
+          <span><span class="live">LIVE</span> Claude-A12F</span>
+          <span class="battery"><span></span></span>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <label class="controls">
+    <input id="usage" type="range" min="0" max="100" value="50">
+    <output id="out">50%</output>
+  </label>
+</main>
+
+<script>
+  const usage = document.querySelector("#usage");
+  const out = document.querySelector("#out");
+  const pct = document.querySelector("#pct");
+  const left = document.querySelector("#left");
+  const fill = document.querySelector("#fill");
+
+  function colorFor(v) {
+    if (v >= 90) return "var(--bar-fill-high)";
+    if (v >= 70) return "var(--bar-fill-mid)";
+    if (v >= 45) return "var(--bar-fill)";
+    return "var(--bar-fill-low)";
+  }
+
+  function render() {
+    const v = Number(usage.value);
+    const remaining = 100 - v;
+    out.value = `${v}%`;
+    pct.textContent = `${v}% used`;
+    left.textContent = `${remaining}K left`;
+    fill.style.width = `${v}%`;
+    fill.style.background = colorFor(v);
+  }
+
+  usage.addEventListener("input", render);
+  render();
+</script>
+</html>

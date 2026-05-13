@@ -17,6 +17,14 @@ static void sanitize_copy(char* dst, size_t n, const char* src) {
     dst[i] = 0;
 }
 
+static void recompute_usage(ClaudeUsage* u) {
+    if (!u) return;
+    if (!u->has_remaining && u->has_limit && u->limit >= u->used) {
+        u->remaining = u->limit - u->used;
+    }
+    u->valid = u->has_remaining || (u->has_limit && u->limit >= u->used);
+}
+
 bool protocol_parse_line(const char* line, ClaudeStatus* out) {
     if (!line || !out) return false;
     if (line[0] != '{') return false;
@@ -36,6 +44,23 @@ bool protocol_parse_line(const char* line, ClaudeStatus* out) {
 
     if (doc["tokens_today"].is<uint32_t>()) {
         out->tokens_today = doc["tokens_today"].as<uint32_t>();
+    }
+    // else: leave previous value unchanged (matches partial-update semantics)
+
+    JsonObject usage = doc["usage"];
+    if (!usage.isNull()) {
+        if (usage["used"].is<uint32_t>()) {
+            out->usage.used = usage["used"].as<uint32_t>();
+        }
+        if (usage["remaining"].is<uint32_t>()) {
+            out->usage.remaining = usage["remaining"].as<uint32_t>();
+            out->usage.has_remaining = true;
+        }
+        if (usage["limit"].is<uint32_t>()) {
+            out->usage.limit = usage["limit"].as<uint32_t>();
+            out->usage.has_limit = true;
+        }
+        recompute_usage(&out->usage);
     }
     // else: leave previous value unchanged (matches partial-update semantics)
 

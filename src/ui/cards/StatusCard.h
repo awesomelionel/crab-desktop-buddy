@@ -39,6 +39,10 @@ private:
     bool            last_drawn_live_;
     uint32_t        last_recheck_ms_;
     uint32_t        last_drawn_tokens_today_;
+    bool            last_drawn_usage_valid_;
+    uint32_t        last_drawn_usage_used_;
+    uint32_t        last_drawn_usage_remaining_;
+    uint8_t         last_drawn_usage_pct_;
     // Tracks whether the prompt badge was on screen on the previous
     // render so we know to wipe the msg block area when COLLAPSED
     // turns off, and tracks the tool string so the badge re-renders
