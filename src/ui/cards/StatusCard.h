@@ -43,6 +43,10 @@ private:
     uint32_t        last_drawn_usage_used_;
     uint32_t        last_drawn_usage_remaining_;
     uint8_t         last_drawn_usage_pct_;
+    // The user-configured daily token cap, snapshotted so changing it
+    // via the web UI triggers a repaint even when tokens_today is
+    // unchanged. 0xFFFFFFFFu sentinel ensures the first render is dirty.
+    uint32_t        last_drawn_daily_cap_;
     // Tracks whether the prompt badge was on screen on the previous
     // render so we know to wipe the msg block area when COLLAPSED
     // turns off, and tracks the tool string so the badge re-renders

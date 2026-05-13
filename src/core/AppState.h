@@ -46,6 +46,7 @@ public:
     BuddyState          buddyState() const { return buddy_state_; }
     uint32_t            lastSnapshotMs() const { return last_snapshot_ms_; }
     const BatteryStatus& battery()   const { return battery_; }
+    const Settings*     settings()   const { return settings_; }
 
     bool isLive(uint32_t now_ms) const;
 

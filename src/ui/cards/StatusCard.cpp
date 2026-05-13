@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 
+#include "../../core/Settings.h"
 #include "../../display/Display.h"
 #include "../BatteryWidget.h"
 #include "../Footer.h"
@@ -71,6 +72,7 @@ StatusCard::StatusCard(const AppState& state, PromptUi& prompt)
       last_drawn_usage_used_(0xFFFFFFFFu),
       last_drawn_usage_remaining_(0xFFFFFFFFu),
       last_drawn_usage_pct_(0xFF),
+      last_drawn_daily_cap_(0xFFFFFFFFu),
       last_drawn_battery_pct_(0xFE),       // sentinel != 0xFF (unsampled)
       last_drawn_battery_charging_(false),
       last_drawn_battery_present_(false),
@@ -125,11 +127,19 @@ bool StatusCard::isDirty() const {
     if (status.waiting != last_drawn_waiting_) return true;
     if (status.valid   != last_drawn_valid_)   return true;
     if (status.tokens_today != last_drawn_tokens_today_) return true;
-    const uint8_t pct = status.usage.valid ? usagePercent(status.usage) : 0;
-    if (status.usage.valid      != last_drawn_usage_valid_)     return true;
-    if (status.usage.used       != last_drawn_usage_used_)      return true;
-    if (status.usage.remaining  != last_drawn_usage_remaining_) return true;
-    if (status.usage.valid && pct != last_drawn_usage_pct_)     return true;
+    // Bridge-supplied usage wins; otherwise synthesize from the user's cap.
+    ClaudeUsage effective = status.usage;
+    const uint32_t cap = state_.settings()
+        ? state_.settings()->data().daily_token_cap : 0u;
+    if (!effective.valid && cap > 0) {
+        protocol_synthesize_usage_from_cap(status.tokens_today, cap, &effective);
+    }
+    const uint8_t pct = effective.valid ? usagePercent(effective) : 0;
+    if (effective.valid      != last_drawn_usage_valid_)     return true;
+    if (effective.used       != last_drawn_usage_used_)      return true;
+    if (effective.remaining  != last_drawn_usage_remaining_) return true;
+    if (effective.valid && pct != last_drawn_usage_pct_)     return true;
+    if (cap != last_drawn_daily_cap_)                        return true;
     if (strncmp(last_drawn_msg_, status.msg, sizeof(last_drawn_msg_)) != 0) return true;
     if (state_.isLive(millis()) != last_drawn_live_) return true;
     const BatteryStatus& bat = state_.battery();
@@ -193,24 +203,32 @@ void StatusCard::render(Display& display) {
                    status.total, status.running, status.waiting);
     }
 
-    // Usage strip. Newer bridge snapshots can provide quota usage, in
-    // which case this draws a percentage + bar + remaining amount.
-    // Legacy snapshots fall back to the old daily-token line.
-    const uint8_t usage_pct = status.usage.valid ? usagePercent(status.usage) : 0;
+    // Usage strip. The bar prefers a bridge-supplied usage object; if the
+    // bridge omits it but the user has configured a daily_token_cap, we
+    // synthesize a ClaudeUsage from (tokens_today, cap) so the same
+    // renderer drives both paths. cap == 0 keeps the legacy line.
+    ClaudeUsage effective = status.usage;
+    const uint32_t cap = state_.settings()
+        ? state_.settings()->data().daily_token_cap : 0u;
+    if (!effective.valid && cap > 0) {
+        protocol_synthesize_usage_from_cap(status.tokens_today, cap, &effective);
+    }
+    const uint8_t usage_pct = effective.valid ? usagePercent(effective) : 0;
     const bool token_changed = state_changed ||
                                (last_drawn_valid_         != status.valid) ||
                                (last_drawn_tokens_today_  != status.tokens_today) ||
-                               (last_drawn_usage_valid_   != status.usage.valid) ||
-                               (last_drawn_usage_used_    != status.usage.used) ||
-                               (last_drawn_usage_remaining_ != status.usage.remaining) ||
-                               (status.usage.valid && last_drawn_usage_pct_ != usage_pct);
+                               (last_drawn_usage_valid_   != effective.valid) ||
+                               (last_drawn_usage_used_    != effective.used) ||
+                               (last_drawn_usage_remaining_ != effective.remaining) ||
+                               (effective.valid && last_drawn_usage_pct_ != usage_pct) ||
+                               (last_drawn_daily_cap_     != cap);
     if (token_changed) {
         if (!state_changed) {
             tft.fillRect(0, 70, 240, 46, ST77XX_BLACK);
         }
-        if (status.usage.valid) {
+        if (effective.valid) {
             char left_buf[kFormatTokenCountBufLen];
-            format_token_count(status.usage.remaining, left_buf, sizeof(left_buf));
+            format_token_count(effective.remaining, left_buf, sizeof(left_buf));
 
             char pct_line[16];
             snprintf(pct_line, sizeof(pct_line), "%u%% used", usage_pct);
@@ -255,7 +273,7 @@ void StatusCard::render(Display& display) {
     const bool msg_changed = state_changed ||
                              (strncmp(last_drawn_msg_, status.msg,
                                       sizeof(last_drawn_msg_)) != 0) ||
-                             (last_drawn_usage_valid_ != status.usage.valid);
+                             (last_drawn_usage_valid_ != effective.valid);
     const bool prompt_changed = state_changed ||
                                 (collapsed != last_drawn_prompt_collapsed_) ||
                                 (collapsed && strncmp(last_drawn_prompt_tool_,
@@ -263,10 +281,10 @@ void StatusCard::render(Display& display) {
                                                       sizeof(last_drawn_prompt_tool_)) != 0);
     if (msg_changed || prompt_changed) {
         if (!state_changed) {
-            if (status.usage.valid && collapsed) {
+            if (effective.valid && collapsed) {
                 tft.fillRect(0, ui::kPromptBadgeEraseY, 240,
                              ui::kPromptBadgeEraseH, ST77XX_BLACK);
-            } else if (status.usage.valid) {
+            } else if (effective.valid) {
                 tft.fillRect(0, 102, 240, 14, ST77XX_BLACK);
             } else {
                 tft.fillRect(0, 92, 240, 24, ST77XX_BLACK);
@@ -278,10 +296,10 @@ void StatusCard::render(Display& display) {
             tft.setTextSize(1);
             tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
             if (status.msg[0]) {
-                const int msg_y = status.usage.valid ? kMsgUsageY : kMsgLegacyY;
+                const int msg_y = effective.valid ? kMsgUsageY : kMsgLegacyY;
                 tft.setCursor(8, msg_y);
                 tft.printf("%.34s", status.msg);
-                if (!status.usage.valid && strlen(status.msg) > 34) {
+                if (!effective.valid && strlen(status.msg) > 34) {
                     tft.setCursor(8, 104);
                     tft.printf("%.34s", status.msg + 34);
                 }
@@ -336,10 +354,11 @@ void StatusCard::render(Display& display) {
     last_drawn_msg_[sizeof(last_drawn_msg_) - 1] = 0;
     last_drawn_live_              = live;
     last_drawn_tokens_today_      = status.tokens_today;
-    last_drawn_usage_valid_       = status.usage.valid;
-    last_drawn_usage_used_        = status.usage.used;
-    last_drawn_usage_remaining_   = status.usage.remaining;
+    last_drawn_usage_valid_       = effective.valid;
+    last_drawn_usage_used_        = effective.used;
+    last_drawn_usage_remaining_   = effective.remaining;
     last_drawn_usage_pct_         = usage_pct;
+    last_drawn_daily_cap_         = cap;
     last_drawn_battery_present_   = bat.present;
     last_drawn_battery_pct_       = bat.percent;
     last_drawn_battery_charging_  = bat.charging;
