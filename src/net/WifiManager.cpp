@@ -1,6 +1,7 @@
 #include "WifiManager.h"
 
 #include <Arduino.h>
+#include <ESPmDNS.h>
 #include <WiFi.h>
 #include <esp_mac.h>
 
@@ -10,6 +11,10 @@ namespace {
 constexpr uint32_t INITIAL_RECONNECT_MS = 2000;
 constexpr uint32_t MAX_RECONNECT_MS     = 30000;
 constexpr const char* AP_SSID_PREFIX    = "claude-buddy-";
+// Fixed mDNS hostname: the device is reachable at claude.local once on
+// Wi-Fi. Kept fixed (not derived from the user-settable device name) so it
+// needs no sanitising, never goes stale, and matches the docs.
+constexpr const char* MDNS_HOSTNAME     = "claude";
 
 void buildApSsid(char* out, size_t out_len) {
     uint8_t mac[6] = {0};
@@ -100,6 +105,10 @@ bool WifiManager::isConnected() const {
 void WifiManager::enterApProvisioning() {
     state_ = WifiState::AP_PROVISIONING;
 
+    // Tear down the mDNS responder — its STA-side hostname/IP is no longer
+    // valid. AP-mode access goes through the captive portal by IP anyway.
+    MDNS.end();
+
     char ap_ssid[32];
     buildApSsid(ap_ssid, sizeof(ap_ssid));
     strncpy(ssid_, ap_ssid, sizeof(ssid_) - 1);
@@ -183,5 +192,17 @@ void WifiManager::enterStaConnected() {
     reconnect_delay_ms_ = INITIAL_RECONNECT_MS;
     reconnect_attempts_ = 0;
     Serial.printf("[wifi] STA_CONNECTED ip=%s\n", WiFi.localIP().toString().c_str());
+
+    // (Re)start the mDNS responder so the web UI is reachable at
+    // <hostname>.local. end()+begin() handles the IP changing across
+    // reconnects; only the one HTTP service is advertised.
+    MDNS.end();
+    if (MDNS.begin(MDNS_HOSTNAME)) {
+        MDNS.addService("http", "tcp", 80);
+        Serial.printf("[wifi] mDNS up at %s.local\n", MDNS_HOSTNAME);
+    } else {
+        Serial.println("[wifi] mDNS begin failed");
+    }
+
     if (!was_connected && bus_) bus_->publish(EventKind::WifiConnected);
 }

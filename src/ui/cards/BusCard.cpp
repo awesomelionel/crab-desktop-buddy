@@ -430,7 +430,7 @@ void BusCard::render(Display& display) {
             break;
         }
         case DisplayState::NoWifi:
-            renderCenterMessage(tft, "No Wi-Fi", "Configure at claude.local");
+            renderCenterMessage(tft, "No Wi-Fi", "waiting to reconnect");
             break;
         case DisplayState::Empty: {
             char l[32];
