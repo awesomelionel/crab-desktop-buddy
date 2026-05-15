@@ -12,6 +12,7 @@
 #include "hal/Battery.h"
 #include "input/InputRouter.h"
 #include "net/BleLink.h"
+#include "net/BusFetchService.h"
 #include "net/HttpServer.h"
 #include "net/WifiManager.h"
 #include "prompt_ui.h"
@@ -34,6 +35,7 @@ static Settings     settingsStore;  // class Settings (the wrapper); the lowerca
 static ConfigStore  configStore;
 static WifiManager  wifiManager{configStore};
 static BleLink      bleLink{appState};
+static net::BusFetchService busFetchService;
 static FactoryResetCoordinator factoryReset{configStore, settingsStore,
                                             appState.macDeviceName()};
 static HttpServer   httpServer{wifiManager, appState, configStore, settingsStore,
@@ -43,7 +45,8 @@ static PromptUi     promptUi = {};
 static CardController cardController{appState, eventBus, wifiManager, promptUi, bleLink,
                                      settingsStore,
                                      UpdateManager::instance(),
-                                     factoryReset};
+                                     factoryReset,
+                                     busFetchService};
 static InputRouter  inputRouter{PIN_BTN_NEXT,   BTN_NEXT_PRESSED_LEVEL,
                                 PIN_BTN_PREV,   BTN_PREV_PRESSED_LEVEL,
                                 PIN_BTN_CENTER, BTN_CENTER_PRESSED_LEVEL,
@@ -108,6 +111,7 @@ void setup() {
     }
 #endif
     wifiManager.begin();
+    busFetchService.begin();
     httpServer.begin();
 
     appState.setBuddyState(state_derive(appState.status(), appState.isLive(millis())));

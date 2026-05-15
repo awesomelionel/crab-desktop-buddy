@@ -7,6 +7,7 @@
 #include "../core/EventBus.h"
 #include "../core/Settings.h"
 #include "../input/InputRouter.h"
+#include "../net/BusFetchService.h"
 #include "../net/WifiManager.h"
 #include "prompt_ui.h"
 #include "settings_model.h"
@@ -31,7 +32,8 @@ class CardController {
 public:
     CardController(AppState& app, EventBus& bus, WifiManager& wifi,
                    PromptUi& prompt, BleLink& ble, Settings& settings,
-                   UpdateManager& um, FactoryResetCoordinator& fr);
+                   UpdateManager& um, FactoryResetCoordinator& fr,
+                   net::BusFetchService& service);
 
     // The sleep manager queries last-input time through the router; bind
     // after construction so the InputRouter (which needs stack()) can be
@@ -58,6 +60,7 @@ private:
 
     UpdateManager&           um_;
     FactoryResetCoordinator& fr_;
+    net::BusFetchService&    service_;
 
     StatusCard       status_card_;
     EyesCard         eyes_card_;

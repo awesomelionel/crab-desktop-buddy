@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "../../display/Display.h"
+#include "bus_fetch_logic.h"
 
 #include <stdio.h>
 
@@ -87,10 +88,12 @@ const char* typeLabel(bus_arrivals::BusType t) {
 
 BusCard::BusCard(uint8_t slot_index,
                  const Settings& settings,
-                 const WifiManager& wifi)
+                 const WifiManager& wifi,
+                 net::BusFetchService& service)
     : slot_(slot_index),
       settings_(settings),
       wifi_(wifi),
+      service_(service),
       data_{},
       last_fetch_attempt_ms_(0),
       shown_at_ms_(0),
@@ -131,9 +134,19 @@ bool BusCard::isDirty() const {
 void BusCard::onShow() {
     visible_ = true;
     shown_at_ms_ = millis();
-    // Trigger an immediate fetch on the next tick.
-    last_fetch_attempt_ms_ = 0;
     dirty_ = true;
+
+    // Pull any preloaded staged result into data_ before the first render
+    // so the card lands on real data instead of "Loading...".
+    if (service_.takeResult(slot_, data_)) {
+        // Preload counts as the most recent fetch attempt — preserve the
+        // 30 s refresh schedule instead of immediately re-fetching.
+        last_fetch_attempt_ms_ = data_.last_fetch_success_ms;
+        last_tick_minute_ = 0;
+    } else {
+        // No preload — schedule an immediate HIGH request on next tick.
+        last_fetch_attempt_ms_ = 0;
+    }
 }
 
 void BusCard::onHide() {
@@ -148,9 +161,23 @@ void BusCard::tick(uint32_t now_ms) {
         return;
     }
 
-    if (shouldFetch(now_ms)) {
-        doFetch(now_ms);
+    // Always poll the service — picks up a 30 s refresh or a late-arriving
+    // result for a previously-submitted request.
+    if (service_.takeResult(slot_, data_)) {
         dirty_ = true;
+        last_tick_minute_ = 0;
+        return;
+    }
+
+    if (shouldFetch(now_ms)) {
+        const char* code = settings_.data().bus_stops[slot_].code;
+        if (code[0] != '\0') {
+            service_.request(slot_, code,
+                             bus_fetch_logic::FetchPriority::HIGH_PRIO);
+        }
+        last_fetch_attempt_ms_ = now_ms;
+        // Don't mark dirty yet — display state hasn't changed. The next
+        // tick that picks up the staged result will mark dirty.
         return;
     }
 
@@ -166,18 +193,6 @@ void BusCard::tick(uint32_t now_ms) {
 bool BusCard::shouldFetch(uint32_t now_ms) const {
     if (last_fetch_attempt_ms_ == 0) return true;
     return (now_ms - last_fetch_attempt_ms_) >= kFetchPeriodMs;
-}
-
-void BusCard::doFetch(uint32_t now_ms) {
-    last_fetch_attempt_ms_ = now_ms;
-    const char* code = settings_.data().bus_stops[slot_].code;
-    if (code[0] == '\0') {
-        // Slot got cleared while card was in stack; rebuildStack will
-        // remove us shortly. Nothing to do.
-        return;
-    }
-    fetcher_.fetch(code, now_ms, data_);
-    last_tick_minute_ = 0;
 }
 
 bool BusCard::handleButton(ButtonEvent ev, uint32_t now_ms) {

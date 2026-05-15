@@ -4,7 +4,7 @@
 
 #include "../Card.h"
 #include "../../core/Settings.h"
-#include "../../net/BusArrivalsFetcher.h"
+#include "../../net/BusFetchService.h"
 #include "../../net/WifiManager.h"
 #include "bus_arrivals.h"
 #include "settings_model.h"
@@ -13,7 +13,8 @@ class BusCard : public Card {
 public:
     BusCard(uint8_t slot_index,
             const Settings& settings,
-            const WifiManager& wifi);
+            const WifiManager& wifi,
+            net::BusFetchService& service);
 
     void invalidate() override;
     bool isDirty() const override;
@@ -41,7 +42,6 @@ private:
 
     DisplayState computeState(uint32_t now_ms) const;
     bool         shouldFetch(uint32_t now_ms) const;
-    void         doFetch(uint32_t now_ms);
     int          displayedMinute(uint32_t now_ms,
                                  const bus_arrivals::BusServiceArrival& svc) const;
 
@@ -55,7 +55,7 @@ private:
     uint8_t                          slot_;
     const Settings&                  settings_;
     const WifiManager&               wifi_;
-    net::BusArrivalsFetcher          fetcher_;
+    net::BusFetchService&            service_;
     bus_arrivals::BusStopArrivals    data_;
     uint32_t                         last_fetch_attempt_ms_;
     uint32_t                         shown_at_ms_;
