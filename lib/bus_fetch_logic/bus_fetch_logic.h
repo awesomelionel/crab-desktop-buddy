@@ -7,7 +7,10 @@
 
 namespace bus_fetch_logic {
 
-enum class FetchPriority : uint8_t { LOW = 0, HIGH = 1 };
+// Enumerators are LOW_PRIO/HIGH_PRIO (not LOW/HIGH) because Arduino's
+// <esp32-hal-gpio.h> #defines LOW and HIGH as numeric macros, which would
+// expand inside FetchPriority::LOW at any caller that includes Arduino.h.
+enum class FetchPriority : uint8_t { LOW_PRIO = 0, HIGH_PRIO = 1 };
 
 struct SlotRequest {
     char          code[settings::BUS_STOP_CODE_LEN + 1];

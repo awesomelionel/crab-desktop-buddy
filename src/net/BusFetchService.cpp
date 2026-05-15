@@ -3,12 +3,6 @@
 #include <Arduino.h>
 #include <string.h>
 
-// Arduino's <esp32-hal-gpio.h> defines LOW/HIGH as numeric macros, which
-// collide with bus_fetch_logic::FetchPriority::{LOW,HIGH} at point-of-use.
-// We don't use Arduino digital I/O in this file, so it's safe to drop them.
-#undef LOW
-#undef HIGH
-
 namespace net {
 
 namespace {
@@ -28,7 +22,7 @@ BusFetchService::BusFetchService()
       logged_high_water_(false) {
     for (uint8_t i = 0; i < settings::MAX_BUS_STOPS; ++i) {
         requests_[i].code[0]  = '\0';
-        requests_[i].prio     = bus_fetch_logic::FetchPriority::LOW;
+        requests_[i].prio     = bus_fetch_logic::FetchPriority::LOW_PRIO;
         requests_[i].wanted   = false;
         staged_ready_[i]      = false;
     }
