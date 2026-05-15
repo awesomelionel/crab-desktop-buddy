@@ -159,6 +159,17 @@ void CardController::runBacklightManager(uint32_t now_ms, Display& display) {
     }
 }
 
+void CardController::preloadNeighbour(size_t carousel_index) {
+    const settings::Settings& d = settings_.data();
+    if (carousel_index >= d.cards_order_count) return;
+    uint8_t card_id = d.cards_order[carousel_index];
+    if (card_id < settings::CARD_BUS_1 || card_id > settings::CARD_BUS_4) return;
+    uint8_t slot = (uint8_t)(card_id - settings::CARD_BUS_1);
+    const char* code = d.bus_stops[slot].code;
+    if (code[0] == '\0') return;
+    service_.request(slot, code, bus_fetch_logic::FetchPriority::LOW_PRIO);
+}
+
 void CardController::tick(uint32_t now_ms, Display& display) {
     runBacklightManager(now_ms, display);
 
@@ -213,5 +224,23 @@ void CardController::tick(uint32_t now_ms, Display& display) {
     // Don't bother rendering while asleep — saves SPI traffic.
     if (!display.isAsleep()) {
         stack_.tick(now_ms, display);
+    }
+
+    // ---- Neighbour preload ----------------------------------------------
+    // Track carousel index changes; ~750 ms after the user settles on a
+    // card, prefetch the up/down neighbours if they're bus cards. This
+    // keeps the worker out of the way during rapid scrolling.
+    size_t cur_index = stack_.index();
+    if (cur_index != last_seen_index_) {
+        last_seen_index_      = cur_index;
+        last_card_change_ms_  = now_ms;
+        preload_done_for_index_ = (size_t)-1;
+    }
+    if (cur_index != preload_done_for_index_ &&
+        (now_ms - last_card_change_ms_) >= kPreloadDebounceMs &&
+        stack_.size() > 1) {
+        preloadNeighbour((cur_index + stack_.size() - 1) % stack_.size());
+        preloadNeighbour((cur_index + 1) % stack_.size());
+        preload_done_for_index_ = cur_index;
     }
 }
