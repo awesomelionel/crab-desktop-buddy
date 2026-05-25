@@ -20,3 +20,17 @@ that actually change, not the full screen.
 States that repaint infrequently (IDLE blinks every 8+ s) can still use
 `fillScreen` because a single 13 ms flash at multi-second intervals is
 imperceptible.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live as markdown files under `.scratch/<feature-slug>/` in this repo. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary (needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout — `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.

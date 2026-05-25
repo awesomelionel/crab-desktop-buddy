@@ -43,6 +43,7 @@ From the Web UI you can:
 - Adjust Claude live timeout.
 - Configure screen sleep, dim timeout, dim brightness, and full brightness.
 - Enable, disable, order, and choose the boot card.
+- Configure up to four bus stop codes and labels.
 - Scan and save Wi-Fi credentials.
 - Reboot, reset settings, or forget Wi-Fi.
 - Check for and install firmware updates from GitHub Releases.
@@ -65,6 +66,16 @@ Release tags should use `vMAJOR.MINOR.PATCH`, for example `v0.1.5`. CI builds ta
 - The device shows a full-screen confirmation card.
 - Holding the center button for 3 seconds wipes Wi-Fi credentials and settings, then reboots.
 - Holding center for 5 seconds outside that armed flow still forgets Wi-Fi as a recovery path.
+
+### Bus Arrivals
+
+Up to four bus stop cards can be configured, each showing live next-bus ETAs for a Singapore bus stop:
+
+- Configure stop codes and optional labels from the Web UI or `/api/settings/bus-stops`.
+- Each card fetches arrivals every 30 seconds in a background FreeRTOS task; results are staged and polled by the card on the main thread.
+- Scrollable service list with ETA, load, and bus type columns.
+- Neighbour cards are preloaded ~750 ms after the carousel settles so flipping between stops is instant.
+- Cards auto-disable when their stop code is empty and re-enable when one is saved.
 
 ### Hardware Support
 
@@ -156,6 +167,7 @@ Key endpoints served in station mode:
 | `/api/settings` | GET | Current persisted settings |
 | `/api/settings/device` | POST | Device name, live timeout, sleep/dim/backlight levels |
 | `/api/settings/cards` | POST | Enabled cards, card order, boot card |
+| `/api/settings/bus-stops` | POST | Save bus stop codes and labels |
 | `/api/settings/network` | POST | Save Wi-Fi credentials and reboot |
 | `/api/networks` | GET | Wi-Fi scan results |
 | `/api/scan` | POST | Start Wi-Fi scan |
@@ -208,36 +220,59 @@ DEVICE_HOST=<device-ip> ./tools/web-smoke.sh
 ```text
 src/
   main.cpp                         boot, main loop, wiring
-  ble_bridge.*                     BLE NUS bridge
+  ble_bridge.*                     BLE NUS bridge (C-style layer)
   core/
-    AppState.*                     shared runtime state
-    ConfigStore.*                  Wi-Fi credential storage
-    Settings.*                     persisted user settings
+    AppState.*                     shared runtime state (status, battery, BuddyState)
+    ConfigStore.*                  Wi-Fi credential storage (NVS)
+    EventBus.*                     synchronous pub/sub event bus
+    Settings.*                     persisted user settings (NVS wrapper)
     UpdateManager.*                GitHub release check + OTA install
     FactoryResetCoordinator.*      web-armed hold-to-confirm reset
+  display/
+    Display.*                      TFT display initialisation wrapper
   net/
-    WifiManager.*                  STA/AP Wi-Fi state machine
-    HttpServer.*                   Web UI + JSON API
+    BleLink.*                      BLE NUS bridge (C++ wrapper around ble_bridge)
+    BusArrivalsFetcher.*           HTTP client for bus arrival API
+    BusFetchService.*              FreeRTOS worker that services bus stop fetch requests
     GitHubReleases.*               GitHub releases HTTPS client
+    HttpServer.*                   Web UI + JSON API
+    WifiManager.*                  STA/AP Wi-Fi state machine
   ui/
-    CardController.*               card carousel, overlays, backlight
-    cards/                         status, eyes, Wi-Fi, OTA, reset cards
+    Card.h                         abstract card interface (tick, render, input)
+    CardController.*               card carousel, overlays, backlight manager
+    CardStack.*                    ordered stack with push/pop overlay support
+    BatteryWidget.*                battery percentage + charging indicator widget
+    Footer.*                       persistent status footer (Wi-Fi, live state)
+    PromptBadge.*                  badge overlay shown on prompt arrival
+    cards/
+      BusCard.*                    live bus arrival times for a configured stop
+      EyesCard.*                   animated eyes for disconnected/idle/working states
+      FactoryResetCard.*           full-screen factory reset confirmation
+      PromptCard.*                 permission prompt approve/deny UI
+      StatusCard.*                 Claude session counters, usage bar, message
+      UpdatingCard.*               OTA install progress display
+      WifiCard.*                   connection info and QR code
   hal/
-    Battery.*                      MAX17048 polling
+    Battery.*                      MAX17048 fuel gauge polling
   input/
-    InputRouter.*                  button routing and long holds
+    InputRouter.*                  button routing, debounce, and long-press holds
 
 lib/
-  protocol/                        Claude snapshot parser
-  state/                           Claude state derivation
+  protocol/                        Claude JSON snapshot parser
+  state/                           BuddyState derivation from ClaudeStatus
   prompt_ui/                       prompt decision state machine
-  settings/                        settings model + validation
+  settings/                        settings model, validation, and NVS serialisation
+  bus_arrivals/                    bus arrival data model and JSON parser
+  bus_fetch_logic/                 fetch scheduling and priority logic
   version_compare/                 semver comparison
   github_releases_parse/           GitHub release JSON parser
   factory_reset_state/             pure reset confirmation state machine
-  backlight/                       dim/off logic
-  buttons/                         button helpers
+  backlight/                       dim/off timing logic
+  buttons/                         button debounce helpers
 
 test/
-  test_*                           Unity tests for pure libraries
+  test_*                           Unity tests for pure lib/ modules (runs on native)
+
+deskhog_src/
+                                   reference firmware from a previous project; not part of the active build
 ```
