@@ -1,36 +1,36 @@
-# desktop-buddy
+# 🦀 Desktop-buddy
 
 ESP32-S3 firmware for the [Adafruit Feather ESP32-S3 Reverse TFT](https://www.adafruit.com/product/5691). It connects to Claude Desktop over BLE, shows live session state on the built-in TFT, lets you approve or deny permission prompts from the device, and exposes a local Web UI for Wi-Fi, settings, OTA updates, and reset actions.
 
-## Features
+## ✨ Features
 
-### Claude Session Display
+### 🖥️ Claude Session Display
 
-- **Card carousel** navigated by the onboard buttons.
-- **Status card** with Claude state, total/running/waiting counts, latest message, usage percentage/bar, battery, and live/offline footer.
-- **Animated eyes card** for `DISCONNECTED`, `IDLE`, `WORKING`, `WAITING`, and completion feedback.
-- **Wi-Fi card** with current connection state, device URL, and QR code.
-- **Prompt overlay** that takes over when Claude Desktop is waiting on a permission decision.
+- 🎠 **Card carousel** navigated by the onboard buttons.
+- 📊 **Status card** with Claude state, total/running/waiting counts, latest message, usage percentage/bar, battery, and live/offline footer.
+- 👀 **Animated eyes card** for `DISCONNECTED`, `IDLE`, `WORKING`, `WAITING`, and completion feedback.
+- 📶 **Wi-Fi card** with current connection state, device URL, and QR code.
+- 🔔 **Prompt overlay** that takes over when Claude Desktop is waiting on a permission decision.
 
-### Permission Prompts
+### 🔐 Permission Prompts
 
 When Claude Desktop sends a snapshot with a `prompt`, the device shows a decision UI:
 
-- **Approve** sends `{"cmd":"permission","id":"...","decision":"once"}`.
-- **Deny** sends `{"cmd":"permission","id":"...","decision":"deny"}`.
-- **Dismiss** hides the prompt locally without sending a decision.
+- ✅ **Approve** sends `{"cmd":"permission","id":"...","decision":"once"}`.
+- ❌ **Deny** sends `{"cmd":"permission","id":"...","decision":"deny"}`.
+- 🙈 **Dismiss** hides the prompt locally without sending a decision.
 - Dismissed prompt ids stay collapsed so the same prompt does not keep taking over the screen.
 - If the prompt disappears or the BLE link goes offline, the device clears the prompt UI.
 
-### BLE / Claude Desktop
+### 📡 BLE / Claude Desktop
 
-- Nordic UART Service (NUS) BLE bridge.
-- Advertises as a MAC-derived `Claude-XXXX` device.
-- Re-advertises automatically after disconnects.
-- Handles MTU fragmentation and newline-delimited JSON snapshots.
-- Uses a configurable heartbeat timeout to mark Claude as offline.
+- 🔗 Nordic UART Service (NUS) BLE bridge.
+- 🏷️ Advertises as a MAC-derived `Claude-XXXX` device.
+- 🔁 Re-advertises automatically after disconnects.
+- 📦 Handles MTU fragmentation and newline-delimited JSON snapshots.
+- 💓 Uses a configurable heartbeat timeout to mark Claude as offline.
 
-### Wi-Fi + Web UI
+### 🌐 Wi-Fi + Web UI
 
 The device hosts a local Web UI:
 
@@ -48,34 +48,34 @@ From the Web UI you can:
 - Check for and install firmware updates from GitHub Releases.
 - Arm a factory reset that must be confirmed on-device.
 
-### OTA Updates
+### 🚀 OTA Updates
 
-- Manual pull-based updates from GitHub Releases.
-- Checks `https://api.github.com/repos/awesomelionel/desktop-buddy/releases/latest`.
-- Installs the release asset named `firmware.bin`.
-- Uses TLS validation and streams the GitHub asset directly into the inactive OTA partition.
-- Marks successful boots valid with ESP32 OTA rollback support.
-- Shows install progress on both the Web UI and an on-device update card.
+- 📥 Manual pull-based updates from GitHub Releases.
+- 🔎 Checks `https://api.github.com/repos/awesomelionel/desktop-buddy/releases/latest`.
+- 📦 Installs the release asset named `firmware.bin`.
+- 🔒 Uses TLS validation and streams the GitHub asset directly into the inactive OTA partition.
+- ↩️ Marks successful boots valid with ESP32 OTA rollback support.
+- 📈 Shows install progress on both the Web UI and an on-device update card.
 
 Release tags should use `vMAJOR.MINOR.PATCH`, for example `v0.1.5`. CI builds tagged releases and uploads `firmware.bin`.
 
-### Factory Reset
+### 🧨 Factory Reset
 
-- Web UI **Factory reset** arms a 30-second confirmation window.
-- The device shows a full-screen confirmation card.
-- Holding the center button for 3 seconds wipes Wi-Fi credentials and settings, then reboots.
-- Holding center for 5 seconds outside that armed flow still forgets Wi-Fi as a recovery path.
+- ⚠️ Web UI **Factory reset** arms a 30-second confirmation window.
+- 🖼️ The device shows a full-screen confirmation card.
+- ⏱️ Holding the center button for 3 seconds wipes Wi-Fi credentials and settings, then reboots.
+- 🆘 Holding center for 5 seconds outside that armed flow still forgets Wi-Fi as a recovery path.
 
-### Hardware Support
+### 🔧 Hardware Support
 
-- MAX17048 battery gauge polling with battery percentage and charging state in the footer.
-- Backlight dim/off behavior based on input and activity.
-- Three onboard buttons:
-  - D2: previous/up
-  - D0 / BOOT: next/down
-  - D1: center/select
+- 🔋 MAX17048 battery gauge polling with battery percentage and charging state in the footer.
+- 💡 Backlight dim/off behavior based on input and activity.
+- 🎛️ Three onboard buttons:
+  - ⬆️ D2: previous/up
+  - ⬇️ D0 / BOOT: next/down
+  - 🎯 D1: center/select
 
-## Hardware
+## 🛠️ Hardware
 
 | Component | Part |
 |---|---|
@@ -84,7 +84,7 @@ Release tags should use `vMAJOR.MINOR.PATCH`, for example `v0.1.5`. CI builds ta
 | Battery gauge | MAX17048 |
 | Input | 3 onboard buttons: D2, D0, D1 |
 
-## Build & Flash
+## ⚡ Build & Flash
 
 Install PlatformIO, then build and upload:
 
@@ -107,23 +107,23 @@ On Windows (PowerShell), use:
 & "$env:USERPROFILE\.platformio\penv\Scripts\pio.exe" device monitor -b 115200
 ```
 
-## Pair with Claude Desktop
+## 🤝 Pair with Claude Desktop
 
 1. In Claude Desktop, enable developer mode from **Help -> Troubleshooting -> Enable Developer Mode**.
 2. Open **Developer -> Open Hardware Buddy...**.
 3. Click **Connect** and select `Claude-XXXX`.
 
-After pairing, the device advertises again after disconnects and Claude Desktop can reconnect in the background.
+After pairing, the device advertises again after disconnects and Claude Desktop can reconnect in the background. 🎉
 
-## First-Time Wi-Fi Setup
+## 🧭 First-Time Wi-Fi Setup
 
 1. Flash the firmware.
 2. Join the open Wi-Fi network named `claude-buddy-XXXX`.
 3. Open `http://192.168.4.1/` if the captive portal does not open automatically.
 4. Pick your Wi-Fi network, enter the password, and save.
-5. The device reboots and shows its LAN URL on the Wi-Fi card.
+5. The device reboots and shows its LAN URL on the Wi-Fi card. 🚀
 
-## OTA Test Flow
+## 🧪 OTA Test Flow
 
 After the OTA-capable firmware has been flashed once over USB:
 
@@ -146,7 +146,7 @@ Useful serial logs:
 
 If installation fails, the Web UI reports the latest OTA error string, such as `probe http 403`, `download http 404`, `no content length`, or `bad firmware header`.
 
-## Web API
+## 🕸️ Web API
 
 Key endpoints served in station mode:
 
@@ -168,7 +168,7 @@ Key endpoints served in station mode:
 | `/api/actions/reset-settings` | POST | Reset settings namespace and reboot |
 | `/api/actions/forget-wifi` | POST | Clear Wi-Fi credentials and reboot |
 
-## Protocol
+## 📨 Protocol
 
 Claude Desktop sends newline-delimited JSON snapshots over BLE. The parser accepts partial updates and preserves missing fields.
 
@@ -183,7 +183,7 @@ Important fields:
 
 Malformed or non-JSON lines are ignored. Fixed-size buffers bound RAM usage on the device.
 
-## Run Tests
+## 🧪 Run Tests
 
 Host-side Unity tests live under `test/`:
 
@@ -203,7 +203,7 @@ There is also a Web smoke script for a running device:
 DEVICE_HOST=<device-ip> ./tools/web-smoke.sh
 ```
 
-## Code Structure
+## 🗂️ Code Structure
 
 ```text
 src/
