@@ -24,6 +24,7 @@ constexpr uint16_t LIVE_TIMEOUT_MIN_S  = 5;
 constexpr uint16_t LIVE_TIMEOUT_MAX_S  = 300;
 constexpr uint16_t SLEEP_TIMEOUT_MIN_S = 30;   // 0 also valid (= disabled)
 constexpr uint16_t SLEEP_TIMEOUT_MAX_S = 3600;
+constexpr uint16_t SLEEP_TIMEOUT_DEFAULT_S = 120;
 constexpr uint16_t DIM_TIMEOUT_MIN_S   = 5;    // 0 also valid (= disabled)
 constexpr uint16_t DIM_TIMEOUT_MAX_S   = 3600;
 constexpr uint8_t  DIM_LEVEL_MIN_PCT   = 1;

@@ -195,7 +195,7 @@ void setDefaults(Settings& s, const char* default_name) {
         strcpy(s.device_name, "Claude");
     }
     s.live_timeout_s    = 30;
-    s.sleep_timeout_s   = 0;
+    s.sleep_timeout_s   = SLEEP_TIMEOUT_DEFAULT_S;
     s.dim_timeout_s     = 30;
     s.dim_level_pct     = 40;
     s.full_level_pct    = 100;

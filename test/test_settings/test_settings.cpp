@@ -66,7 +66,7 @@ static void test_defaults_are_valid(void) {
     TEST_ASSERT_EQUAL_STRING("", err);
     TEST_ASSERT_EQUAL_STRING("Claude-AABB", s.device_name);
     TEST_ASSERT_EQUAL_UINT16(30, s.live_timeout_s);
-    TEST_ASSERT_EQUAL_UINT16(0, s.sleep_timeout_s);
+    TEST_ASSERT_EQUAL_UINT16(120, s.sleep_timeout_s);
     TEST_ASSERT_EQUAL_UINT8(CARD_STATUS, s.boot_card_id);
 }
 
@@ -178,7 +178,7 @@ static void test_to_json_contains_expected_keys(void) {
     TEST_ASSERT_GREATER_THAN(0, n);
     TEST_ASSERT_TRUE(strstr(buf, "\"device_name\":\"Claude-AABB\"") != nullptr);
     TEST_ASSERT_TRUE(strstr(buf, "\"live_timeout_s\":30") != nullptr);
-    TEST_ASSERT_TRUE(strstr(buf, "\"sleep_timeout_s\":0") != nullptr);
+    TEST_ASSERT_TRUE(strstr(buf, "\"sleep_timeout_s\":120") != nullptr);
     TEST_ASSERT_TRUE(strstr(buf, "\"boot_card_id\":0") != nullptr);
     // Cards array contains the real cards with stable IDs
     TEST_ASSERT_TRUE(strstr(buf, "\"name\":\"Status\"") != nullptr);

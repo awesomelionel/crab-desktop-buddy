@@ -28,6 +28,10 @@ public:
     // AppState ref directly. Mirrors PromptCard::setFooter.
     void setFooter(const char* device_name, bool live);
 
+    // Connected-idle nap: same closed-eyes + Zzz look as DISCONNECTED.
+    // CardController sets this from idle_policy::shouldNap each tick.
+    void setNap(bool nap);
+
 private:
     void resetAnim();
     void armState(BuddyState s, uint32_t now_ms);
@@ -39,6 +43,7 @@ private:
     void drawDoneFrame(Adafruit_ST7789& tft, uint32_t t_into_done);
     uint8_t doneSparkleCount(uint32_t t_into_done) const;
     void drawFrame(Adafruit_ST7789& tft, BuddyState state, bool full_clear);
+    void drawSleepLook(Adafruit_ST7789& tft, bool full_clear);
     void drawRotatedSlit(Adafruit_GFX& gfx, int cx, int cy, int h, int sign);
 
     const AppState& state_;
@@ -89,6 +94,13 @@ private:
     uint32_t      done_start_ms_;
     GFXcanvas16*  done_canvas_l_;   // lazy ~2.5 KB; lifetime = card
     GFXcanvas16*  done_canvas_r_;   // lazy ~2.5 KB; lifetime = card
+
+    // ---- Connected-idle nap (render overlay on STATE_IDLE) ----
+    // Not a BuddyState. After idle_policy::shouldNap, we reuse the
+    // DISCONNECTED sleep look until activity returns.
+    bool       nap_;              // requested this tick
+    bool       napping_;          // currently drawing the sleep look
+    bool       last_napping_;     // last rendered nap state (full-clear edge)
 
     // Dirty-tracking against the last rendered frame: a snapshot of the
     // draw outputs so isDirty() can flip true any time the animation moved.

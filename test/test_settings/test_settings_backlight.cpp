@@ -13,6 +13,7 @@ static Settings make_defaults() {
 void test_backlight_defaults(void) {
     Settings s = make_defaults();
     TEST_ASSERT_EQUAL_UINT16(30, s.dim_timeout_s);
+    TEST_ASSERT_EQUAL_UINT16(120, s.sleep_timeout_s);
     TEST_ASSERT_EQUAL_UINT8(40, s.dim_level_pct);
     TEST_ASSERT_EQUAL_UINT8(100, s.full_level_pct);
 }
@@ -75,7 +76,8 @@ void test_dim_timeout_min_accepted(void) {
 
 void test_dim_timeout_max_accepted(void) {
     Settings s = make_defaults();
-    s.dim_timeout_s = DIM_TIMEOUT_MAX_S;       // 3600
+    s.dim_timeout_s   = DIM_TIMEOUT_MAX_S;       // 3600
+    s.sleep_timeout_s = 0;                       // screen-off disabled so dim can be max
     char err[64] = {};
     TEST_ASSERT_TRUE(validate(s, err, sizeof(err)));
 }

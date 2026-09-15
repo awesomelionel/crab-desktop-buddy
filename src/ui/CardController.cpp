@@ -8,6 +8,7 @@
 #include "../display/Display.h"
 #include "../net/BleLink.h"
 #include "backlight.h"
+#include "idle_policy.h"
 
 CardController::CardController(AppState& app, EventBus& bus, WifiManager& wifi,
                                PromptUi& prompt, BleLink& ble, Settings& settings,
@@ -149,6 +150,13 @@ void CardController::runBacklightManager(uint32_t now_ms, Display& display) {
     uint32_t last_input = input_->lastInputMs();
     if (last_input > last_activity_ms_) last_activity_ms_ = last_input;
 
+    // Watching Claude work (or waiting on a prompt) is activity — don't
+    // dim, nap, or blank the screen mid-session just because nobody
+    // pressed a button.
+    if (idle_policy::holdsAwake(app_.buddyState())) {
+        last_activity_ms_ = now_ms;
+    }
+
     uint32_t idle_ms = now_ms - last_activity_ms_;
     uint8_t  pct     = backlight_compute_duty(idle_ms, settings_.data());
 
@@ -191,6 +199,9 @@ void CardController::tick(uint32_t now_ms, Display& display) {
     }
 
     eyes_card_.setFooter(app_.deviceName(), app_.isLive(now_ms));
+    eyes_card_.setNap(idle_policy::shouldNap(app_.buddyState(),
+                                            now_ms - last_activity_ms_,
+                                            settings_.data()));
 
     char outBuf[96];
     if (prompt_ui_take_outgoing(&prompt_, outBuf, sizeof(outBuf))) {

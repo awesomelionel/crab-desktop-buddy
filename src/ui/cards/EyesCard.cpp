@@ -265,6 +265,9 @@ EyesCard::EyesCard(const AppState& state, PromptUi& prompt)
     last_done_active_  = false;
     last_done_phase_t_ = 0;
     last_sparkle_brightness_n_ = 0;
+    nap_           = false;
+    napping_       = false;
+    last_napping_  = false;
 }
 
 void EyesCard::invalidate() {
@@ -308,6 +311,7 @@ void EyesCard::resetAnim() {
     last_done_active_          = false;
     last_done_phase_t_         = 0;
     last_sparkle_brightness_n_ = 0;
+    napping_                   = false;
     // done_canvas_l_/r_ are NOT reset — they are owned for the card's
     // lifetime, like work_canvas_ and wait_q_canvas_.
 }
@@ -320,6 +324,10 @@ void EyesCard::setFooter(const char* name, bool live) {
         footer_device_[0] = 0;
     }
     footer_live_ = live;
+}
+
+void EyesCard::setNap(bool nap) {
+    nap_ = nap;
 }
 
 bool EyesCard::handleButton(ButtonEvent ev, uint32_t now_ms) {
@@ -337,6 +345,7 @@ bool EyesCard::handleButton(ButtonEvent ev, uint32_t now_ms) {
 
 void EyesCard::armState(BuddyState state, uint32_t now) {
     prev_state_ = state;
+    napping_    = false;
     switch (state) {
         case STATE_DISCONNECTED:
             disc_anim_start_ms_ = now;
@@ -673,6 +682,18 @@ void EyesCard::tick(uint32_t now_ms) {
             break;
 
         case STATE_IDLE: {
+            if (nap_ && !done_active_) {
+                if (!napping_) {
+                    napping_            = true;
+                    disc_anim_start_ms_ = now_ms;
+                    disc_age_ms_        = 0;
+                }
+                disc_age_ms_ = now_ms - disc_anim_start_ms_;
+                break;
+            }
+            if (napping_) {
+                armState(STATE_IDLE, now_ms);
+            }
             tickBlink(now_ms);
             tickGlanceIdle(now_ms);   // sets draw_dx_
             // y offset eases proportionally with |dx|: looking up at the
@@ -754,6 +775,7 @@ bool EyesCard::isDirty() const {
     //      bottom of the block is what keeps the IDLE-era checks from
     //      firing (e.g. last_h_ != draw_h_) on celebration frames.
     if (last_done_active_ != done_active_) return true;
+    if (napping_ != last_napping_)         return true;
     if (done_active_) {
         const uint32_t t      = millis() - done_start_ms_;
         const uint32_t bucket = (t / 16) * 16;
@@ -806,7 +828,8 @@ void EyesCard::render(Display& display) {
     //      are wiped and IDLE re-paints from a known-clean field.
     bool stateJustChanged = !frame_valid_ || (last_state_ != bs)
                           || last_done_active_;
-    bool full_clear = stateJustChanged ||
+    bool napJustChanged = napping_ != last_napping_;
+    bool full_clear = stateJustChanged || napJustChanged ||
                       (bs != STATE_DISCONNECTED && bs != STATE_WORKING &&
                        bs != STATE_WAITING && bs != STATE_IDLE);
     drawFrame(tft, bs, full_clear);
@@ -821,50 +844,55 @@ void EyesCard::render(Display& display) {
     last_badge_visible_ = (bs == STATE_WAITING && prompt_.mode == PROMPT_UI_COLLAPSED);
     last_disc_age_ = disc_age_ms_;
     last_done_active_   = false;
+    last_napping_  = napping_;
     frame_valid_   = true;
 }
 
+void EyesCard::drawSleepLook(Adafruit_ST7789& tft, bool full_clear) {
+    if (full_clear) {
+        tft.fillScreen(ST77XX_BLACK);
+    } else {
+        // Erase only the Z glyph bounding zone: ~2100 px vs 32400
+        // for fillScreen — eliminates the ~13 ms full-screen black flash
+        // that causes flicker at 62 fps.
+        tft.fillRect(kZSpawnX, kZSpawnY + kZDriftY - 2,
+                     240 - kZSpawnX, -kZDriftY + 3 * 8 + 4,
+                     ST77XX_BLACK);
+    }
+
+    const int cy  = kBaseIdleY + 15;       // 67
+    const int top = cy - kLidH / 2;        // 62
+    tft.fillRect(kLeftX,  top, kEyeW, kLidH, ST77XX_WHITE);
+    tft.fillRect(kRightX, top, kEyeW, kLidH, ST77XX_WHITE);
+
+    const uint32_t base = disc_age_ms_ % kZLoopMs;
+    const uint32_t offsets[3] = {0, 1000, 2000};
+    for (int i = 0; i < 3; i++) {
+        uint32_t age = (base + offsets[i]) % kZLoopMs;  // 0..2999
+
+        int x = kZSpawnX + (int)((int32_t)kZDriftX * (int32_t)age / (int32_t)kZLoopMs);
+        int y = kZSpawnY + (int)((int32_t)kZDriftY * (int32_t)age / (int32_t)kZLoopMs);
+
+        uint8_t size;
+        if      (age < 1000) size = 1;
+        else if (age < 2000) size = 2;
+        else                 size = 3;
+
+        uint16_t col;
+        if      (age < 1800) col = ST77XX_WHITE;
+        else if (age < 2550) col = kDimGrey;
+        else                 continue;  // last ~450 ms: don't draw
+
+        tft.setCursor(x, y);
+        tft.setTextSize(size);
+        tft.setTextColor(col);
+        tft.print('Z');
+    }
+}
+
 void EyesCard::drawFrame(Adafruit_ST7789& tft, BuddyState state, bool full_clear) {
-    if (state == STATE_DISCONNECTED) {
-        if (full_clear) {
-            tft.fillScreen(ST77XX_BLACK);
-        } else {
-            // Erase only the Z glyph bounding zone: ~2100 px vs 32400
-            // for fillScreen — eliminates the ~13 ms full-screen black flash
-            // that causes flicker at 62 fps.
-            tft.fillRect(kZSpawnX, kZSpawnY + kZDriftY - 2,
-                         240 - kZSpawnX, -kZDriftY + 3 * 8 + 4,
-                         ST77XX_BLACK);
-        }
-
-        const int cy  = kBaseIdleY + 15;       // 67
-        const int top = cy - kLidH / 2;        // 62
-        tft.fillRect(kLeftX,  top, kEyeW, kLidH, ST77XX_WHITE);
-        tft.fillRect(kRightX, top, kEyeW, kLidH, ST77XX_WHITE);
-
-        const uint32_t base = disc_age_ms_ % kZLoopMs;
-        const uint32_t offsets[3] = {0, 1000, 2000};
-        for (int i = 0; i < 3; i++) {
-            uint32_t age = (base + offsets[i]) % kZLoopMs;  // 0..2999
-
-            int x = kZSpawnX + (int)((int32_t)kZDriftX * (int32_t)age / (int32_t)kZLoopMs);
-            int y = kZSpawnY + (int)((int32_t)kZDriftY * (int32_t)age / (int32_t)kZLoopMs);
-
-            uint8_t size;
-            if      (age < 1000) size = 1;
-            else if (age < 2000) size = 2;
-            else                 size = 3;
-
-            uint16_t col;
-            if      (age < 1800) col = ST77XX_WHITE;
-            else if (age < 2550) col = kDimGrey;
-            else                 continue;  // last ~450 ms: don't draw
-
-            tft.setCursor(x, y);
-            tft.setTextSize(size);
-            tft.setTextColor(col);
-            tft.print('Z');
-        }
+    if (state == STATE_DISCONNECTED || (state == STATE_IDLE && napping_)) {
+        drawSleepLook(tft, full_clear);
         return;
     }
 

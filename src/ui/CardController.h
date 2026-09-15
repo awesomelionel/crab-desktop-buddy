@@ -27,7 +27,9 @@ class UpdateManager;
 // Owns the card carousel + prompt overlay, listens to EventBus, drains
 // outgoing PromptUi decisions to BleLink, and runs the backlight manager
 // (FULL → DIM → OFF backlight management driven by input idleness +
-// meaningful EventBus wakes).
+// meaningful EventBus wakes). WORKING/WAITING hold the idle clock so the
+// face stays awake while Claude is busy; connected-idle nap is fed to
+// EyesCard via setNap().
 class CardController {
 public:
     CardController(AppState& app, EventBus& bus, WifiManager& wifi,

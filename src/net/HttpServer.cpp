@@ -312,7 +312,7 @@ void HttpServer::registerStaHandlers() {
                 "<div class=form-group>"
                   "<label for=st>Sleep timeout (s)</label>"
                   "<input id=st name=sleep_timeout_s type=number min=0 max=3600 required>"
-                  "<p class=tip>Backlight off after N seconds idle. 0 disables. Otherwise 30..3600.</p>"
+                  "<p class=tip>Backlight off after N seconds idle. 0 disables. Otherwise 30..3600. Default 120.</p>"
                 "</div>"
                 "<div class=form-group>"
                   "<label for=dt>Dim timeout (s)</label>"
