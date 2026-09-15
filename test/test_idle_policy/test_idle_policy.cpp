@@ -58,8 +58,17 @@ static void test_disconnected_does_not_use_connected_nap(void) {
     TEST_ASSERT_FALSE(idle_policy::shouldNap(STATE_DISCONNECTED, 60'000, s));
 }
 
+// Activity stamped with millis() after the loop captured now_ms must not
+// underflow into ~49 days of idle (that blanked the screen for a frame and
+// the wake-invalidate wiped the DONE celebration).
+static void test_idle_ms_clamps_activity_after_now(void) {
+    TEST_ASSERT_EQUAL_UINT32(0,   idle_policy::idleMs(1'000, 1'005));
+    TEST_ASSERT_EQUAL_UINT32(500, idle_policy::idleMs(1'500, 1'000));
+}
+
 int main(int /*argc*/, char** /*argv*/) {
     UNITY_BEGIN();
+    RUN_TEST(test_idle_ms_clamps_activity_after_now);
     RUN_TEST(test_working_and_waiting_hold_awake);
     RUN_TEST(test_nap_timeout_follows_dim_when_set);
     RUN_TEST(test_nap_timeout_falls_back_when_dim_disabled);

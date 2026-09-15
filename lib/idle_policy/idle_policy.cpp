@@ -6,6 +6,10 @@ namespace {
 constexpr uint32_t kNapFallbackMs = 30'000;
 }
 
+uint32_t idleMs(uint32_t now_ms, uint32_t last_activity_ms) {
+    return last_activity_ms > now_ms ? 0 : now_ms - last_activity_ms;
+}
+
 bool holdsAwake(BuddyState state) {
     return state == STATE_WORKING || state == STATE_WAITING;
 }

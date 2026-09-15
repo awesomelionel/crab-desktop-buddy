@@ -157,7 +157,7 @@ void CardController::runBacklightManager(uint32_t now_ms, Display& display) {
         last_activity_ms_ = now_ms;
     }
 
-    uint32_t idle_ms = now_ms - last_activity_ms_;
+    uint32_t idle_ms = idle_policy::idleMs(now_ms, last_activity_ms_);
     uint8_t  pct     = backlight_compute_duty(idle_ms, settings_.data());
 
     bool was_off = display.isAsleep();
@@ -200,7 +200,7 @@ void CardController::tick(uint32_t now_ms, Display& display) {
 
     eyes_card_.setFooter(app_.deviceName(), app_.isLive(now_ms));
     eyes_card_.setNap(idle_policy::shouldNap(app_.buddyState(),
-                                            now_ms - last_activity_ms_,
+                                            idle_policy::idleMs(now_ms, last_activity_ms_),
                                             settings_.data()));
 
     char outBuf[96];
