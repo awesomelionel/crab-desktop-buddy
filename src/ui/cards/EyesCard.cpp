@@ -30,59 +30,41 @@ const uint32_t kZLoopMs   = 3000;
 const uint8_t kBlinkH[] = {30, 20, 10, 0, 10, 20, 30};
 const int     kBlinkN   = 7;
 
-// Idle-face timing knobs. Curious-and-alert feel: blink ~every 4.5 s with
-// snappier per-step animation, plus a slow eased side-to-side glance every
-// 2.5–4.5 s. Each glance event eases 0 → A, holds, eases A → -A across the
-// face, holds, eases back to 0 — no instant snaps, mirrors the WAITING
-// gaze cadence so both states feel like the same character.
+// Blink timing for the rectangle-eye states (WAITING). IDLE and WORKING
+// blink on their own baked schedules instead.
 const uint32_t kBlinkIntervalMs    = 4500;
 const uint32_t kBlinkStepMs        = 70;
-const uint32_t kGlanceMinMs        = 2500;
-const uint32_t kGlanceJitterMs     = 2000;
-const int      kGlanceX            = 20;    // peak horizontal offset per side
-const int      kGlanceDy           = -10;   // peak vertical offset (up); scales with |draw_dx_|
-const uint32_t kGlanceEaseMs       = 700;   // cubic ease per hop; matches kWaitScanEaseMs
-const uint32_t kGlanceHoldEdgeMs   = 350;   // hold at A and at B before easing onward
 
-// ---- STATE_WORKING (focused-thinking redesign) ----
-// All times in ms; angles in radians.
-const uint32_t kWorkBreatheMs       = 1100;
-const uint32_t kWorkDriftMs         = 1400;
-const uint32_t kWorkDotsMs          = 1500;
-const uint32_t kWorkBlinkIntervalMs = 7000;
-const uint32_t kWorkBlinkStepMs     = 40;     // 7 steps × 40 ms = 280 ms total
-const int      kWorkBaseH           = 9;
-const int      kWorkBreatheAmp      = 2;      // h ranges 7..11
-const int      kWorkDriftAmp        = 8;      // dx ranges -8..+8
-const float    kWorkRotRad          = 0.2618f; // 15° in radians
-const uint8_t  kWorkBlinkH[]        = {9, 6, 3, 0, 3, 6, 9};
-const int      kWorkBlinkN          = 7;
+// ---- STATE_IDLE and STATE_WORKING ----
+// Geometry, keyframes and timing all live in lib/avatar_face; the only
+// device-side choices left here are how the per-eye canvas is placed and the
+// WORKING-only dressing below.
 
-const int      kWorkLeftCx          = 45;     // matches kLeftX  + kEyeW/2
-const int      kWorkRightCx         = 195;    // matches kRightX + kEyeW/2
-const int      kWorkEyeCy           = 67;     // matches kBaseIdleY + 15
-const int      kDotsX[3]            = {184, 194, 204};
-const int      kDotsY               = 22;
-const int      kDotR                = 2;      // 5 px diameter via fillCircle r=2
+// Working jitter: a 1 px wobble on two close-but-coprime periods, so the two
+// axes drift in and out of phase instead of tracing a fixed ellipse. Keeps a
+// sense of effort through the animation's 2-3 s holds.
+const int      kShakeAmpPx    = 1;
+const uint32_t kShakeXPeriodMs = 90;
+const uint32_t kShakeYPeriodMs = 130;
 
-// Rotation basis — precomputed; width is fixed at kEyeW.
-const float    kCos15               = 0.9659258f;  // cosf(0.2618f)
-const float    kSin15               = 0.2588190f;  // sinf(0.2618f)
-
-// Per-frame erase rect for one eye (covers rotated 30×11 max bbox + ±drift).
-// At peak breathe (h=11) the rotated corners reach ±9 px vertically and
-// ±16 px horizontally about the eye centre; the previous 17 px height left
-// the topmost/bottommost corner row outside the erase, so drifting the eye
-// laterally trailed a 1-px ghost from the previous frame.
-const int      kWorkEraseW          = 54;     // = 2*16 (bbox) + 2*kWorkDriftAmp + 6 margin
-const int      kWorkEraseH          = 21;     // = 2*9 (bbox) + 3 margin
-
-// Dots erase rect — covers all three positions (5 px dots).
-const int      kDotsEraseX          = 180;
-const int      kDotsEraseY          = kDotsY - 3;
-const int      kDotsEraseW          = 30;
-const int      kDotsEraseH          = 7;
-
+// Sweat bead: forms at the top of its run, slides down, vanishes, repeats.
+// Parked in the right margin, clear of the eyes — the baked working animation
+// never reaches past x=209 (208.4 plus a pixel of jitter), and the bead's
+// erase band starts at x=216. test_avatar_face pins that gap.
+const int      kSweatCx       = 222;
+const int      kSweatTopY     = 30;
+const int      kSweatDripPx   = 13;
+const uint32_t kSweatDripMs   = 1500;   // fall time
+const uint32_t kSweatGapMs    = 700;    // dry pause before the next bead
+const uint32_t kSweatCycleMs  = kSweatDripMs + kSweatGapMs;
+const int      kSweatR        = 4;      // bead radius
+const int      kSweatTipH     = 6;      // taper above the bead
+const uint16_t kSweatBlue     = 0x555F; // RGB565 light blue
+// Erase band covering every bead position, plus the tip and a pixel of slack.
+const int      kSweatBandX    = kSweatCx - kSweatR - 2;
+const int      kSweatBandY    = kSweatTopY - kSweatTipH - 2;
+const int      kSweatBandW    = 2 * (kSweatR + 2);
+const int      kSweatBandH    = kSweatTipH + kSweatDripPx + 2 * kSweatR + 5;
 // ---- STATE_WAITING redesign (collapsed-prompt eyes) ----
 const int      kBaseWaitYNew         = 22;     // top of eye when neutral; was 32, raised so down-glance has clearance
 const int      kWaitGlanceDownDy     = 14;     // additional eye-top y when glancing at the badge
@@ -124,52 +106,29 @@ const int      kBadgeY       = 135 - 18 - kBadgeBottomGap - kBadgeH;  // 95
 // tool call.
 const uint32_t kDoneSuppressMs   = 1500;
 
-// Per-loop length and per-phase boundaries within one loop (cumulative ms
-// from the loop start). The full celebration runs the loop kDoneLoops
-// times back-to-back; total duration = kDoneLoopMs * kDoneLoops.
-const uint32_t kDoneLoopMs       = 1500;
-const uint32_t kDoneLoops        = 2;
-const uint32_t kDoneTotalMs      = kDoneLoopMs * kDoneLoops;
-const uint32_t kDoneBounceUpMs   = 100;
-const uint32_t kDoneSettleLowMs  = 100;
-const uint32_t kDoneMorphMs      = 150;
-const uint32_t kDoneHoldMs       = 750;
-const uint32_t kDonePhase1End    = kDoneBounceUpMs;                   // 100
-const uint32_t kDonePhase2End    = kDonePhase1End + kDoneSettleLowMs; // 200
-const uint32_t kDonePhase3End    = kDonePhase2End + kDoneMorphMs;     // 350
-const uint32_t kDonePhase4End    = kDonePhase3End + kDoneHoldMs;      // 1100
-// Phase 5 (return) runs from kDonePhase4End to kDoneLoopMs (400 ms).
-
-// Per-eye canvas geometry. Y range 44..84 covers the bounce-up apex
-// (top=44, h=38, bottom=82) and the settle-low bottom (top=56, h=28,
-// bottom=84). Width is 32 to accommodate the 32-px bounce-wide phase
-// (eye widens to 32 during bounce, returns to 30 in the arc/return).
-// Canvas X is offset so the canvas centerline matches the eye centerline.
-const int      kDoneCanvasW         = 32;
-const int      kDoneCanvasH         = 40;
-const int      kDoneCanvasY         = 44;
-const int      kDoneCanvasLeftX     = kLeftX  + (kEyeW - kDoneCanvasW) / 2;  // 29
-const int      kDoneCanvasRightX    = kRightX + (kEyeW - kDoneCanvasW) / 2;  // 179
-
-// Hold-pose arc shape.
-const int      kDoneArcH         = 16;
-const int      kDoneArcTop       = 56;
-
-// Sparkles: 4-point crosses at multiple anchor positions around the eyes.
-// Each anchor draws a center pixel + four satellites at (±arm, 0) and
-// (0, ±arm). Each cross point is rendered as a 3 × 3 block centered on its
-// anchor. The anchors are placed clear of the widest bounce-phase eye
-// extent (canvas y=44..84, eye max x=210 right / x=29 left).
+// DONE is a one-shot celebration overlaid on IDLE, playing avatar_face::kDone
+// once end to end; its length is that animation's loop length.
+//
+// Sparkles: 4-point crosses at anchors around the eyes. Each anchor draws a
+// centre block plus four satellites at (+-arm, 0) and (0, +-arm), each a 3x3
+// block. They fade in, hold, then fade out over the burst, quantised to 0..5
+// visible blocks that drop outer-first so the centre survives longest.
+const uint32_t kDoneSparkleRampMs = 250;    // 0 -> full
+const uint32_t kDoneSparkleHoldMs = 750;    // full
+const uint32_t kDoneSparkleFadeMs = 1300;   // full -> 0
 const int      kDoneSparkleArm   = 11;
 struct SparkleAnchor { int16_t cx; int16_t cy; };
+// Placed clear of the baked burst, which spans x 46..202, y 29..113: the
+// side pair sits in the left and right margins, the third above the eyes.
+// test_avatar_face pins the clearance.
 const SparkleAnchor kDoneSparkleAnchors[] = {
-    { 224,  36 },   // top-right (just above and right of the right eye)
-    {  14,  36 },   // top-left  (mirror)
-    { 120,  18 },   // top-center (above the eye band, between the eyes)
+    { 224,  36 },   // right margin
+    {  14,  36 },   // left margin
+    { 120,  14 },   // above the eyes, between them
 };
 const int kDoneSparkleN = sizeof(kDoneSparkleAnchors) / sizeof(SparkleAnchor);
 
-// Cubic ease-out: 1 - (1-k)^3. Same convention as tickGlanceIdle / tickWaitGaze.
+// Cubic ease-out: 1 - (1-k)^3. Same convention as tickWaitGaze.
 inline float ease_out_cubic(float k) {
     if (k < 0.0f) k = 0.0f;
     if (k > 1.0f) k = 1.0f;
@@ -177,29 +136,6 @@ inline float ease_out_cubic(float k) {
     return 1.0f - inv * inv * inv;
 }
 
-inline int irlerp(int a, int b, float k) {
-    return (int)lroundf((float)a + ((float)b - (float)a) * k);
-}
-
-// Filled upper-half ellipse rasterized into a canvas. Bottom edge sits at
-// y = y_bottom (inclusive); top apex is at y = y_bottom - ry. The ellipse
-// is centered on cx with horizontal radius rx. Half-widths are computed
-// per-scanline from the ellipse equation x^2/rx^2 + y^2/ry^2 = 1, then
-// drawn as a single drawFastHLine. Cheap (≤ ry+1 horizontal lines).
-void drawUpperHalfEllipse(GFXcanvas16& canvas, int cx, int y_bottom,
-                          int rx, int ry, uint16_t color) {
-    if (ry <= 0 || rx <= 0) return;
-    for (int dy = 0; dy <= ry; dy++) {
-        const float yfrac = (float)dy / (float)ry;
-        const float wfrac = 1.0f - yfrac * yfrac;
-        const float clamped = wfrac < 0.0f ? 0.0f : wfrac;
-        const int   half_w = (int)lroundf((float)rx * sqrtf(clamped));
-        const int   y      = y_bottom - dy;
-        const int   x0     = cx - half_w;
-        const int   w      = 2 * half_w + 1;
-        canvas.drawFastHLine(x0, y, w, color);
-    }
-}
 
 // Fill the strips of rect A that are NOT inside rect B with the given
 // colour. Used for tearing-free differential updates: pass (OLD, NEW,
@@ -249,7 +185,6 @@ EyesCard::EyesCard(const AppState& state, PromptUi& prompt)
     last_dx_       = 0;
     last_base_y_   = 0;
     last_blink_h_  = -1;
-    last_dots_n_   = 0;
     last_disc_age_ = 0xFFFFFFFFu;
     last_wait_gaze_dy_   = 0;
     last_badge_visible_  = false;
@@ -258,10 +193,8 @@ EyesCard::EyesCard(const AppState& state, PromptUi& prompt)
     last_footer_device_[0] = 0;
     last_footer_live_      = false;
     last_footer_drawn_     = false;
-    work_canvas_           = nullptr;
+    face_canvas_           = nullptr;
     wait_q_canvas_         = nullptr;
-    done_canvas_l_     = nullptr;
-    done_canvas_r_     = nullptr;
     last_done_active_  = false;
     last_done_phase_t_ = 0;
     last_sparkle_brightness_n_ = 0;
@@ -281,18 +214,26 @@ void EyesCard::resetAnim() {
     blink_i_                 = -1;
     next_blink_ms_           = now + kBlinkIntervalMs;
     blink_step_deadline_ms_  = 0;
-    next_glance_ms_          = now + kGlanceMinMs + (esp_random() % kGlanceJitterMs);
-    glance_event_start_ms_   = 0;
-    glance_event_side_       = +1;
     scan_epoch_ms_           = now;
     draw_h_                  = 30;
     draw_dx_                 = 0;
     draw_base_y_             = kBaseIdleY;
-    next_work_blink_ms_           = now;
-    work_blink_step_deadline_ms_  = 0;
-    draw_work_blink_i_            = -1;
-    draw_blink_h_                 = -1;
-    draw_dots_n_                  = 0;
+    draw_blink_h_            = -1;
+
+    face_anim_             = nullptr;
+    face_pose_             = avatar_face::poseAt(avatar_face::kIdle, 0);
+    face_blink_            = 1.0f;
+    face_anim_active_      = false;
+    last_face_anim_active_ = false;
+    avatar_face::blinkInit(avatar_face::kIdle, face_blink_state_, now);
+    face_eye_valid_[0] = false;
+    face_eye_valid_[1] = false;
+    shake_x_       = 0;
+    shake_y_       = 0;
+    sweat_y_       = -1;
+    last_shake_x_  = 0;
+    last_shake_y_  = 0;
+    last_sweat_y_  = -1;
 
     wait_scan_epoch_ms_       = now;
     draw_wait_gaze_dy_        = 0;
@@ -308,8 +249,8 @@ void EyesCard::resetAnim() {
     last_done_active_          = false;
     last_done_phase_t_         = 0;
     last_sparkle_brightness_n_ = 0;
-    // done_canvas_l_/r_ are NOT reset — they are owned for the card's
-    // lifetime, like work_canvas_ and wait_q_canvas_.
+    // face_canvas_ / wait_q_canvas_ are NOT reset — they are owned for the
+    // card's lifetime.
 }
 
 void EyesCard::setFooter(const char* name, bool live) {
@@ -335,36 +276,44 @@ bool EyesCard::handleButton(ButtonEvent ev, uint32_t now_ms) {
     return false;
 }
 
+// Start one of the baked avatar animations. The entry frame full-clears the
+// panel, so nothing is left to erase around either eye.
+void EyesCard::armAvatar(const avatar_face::Anim& anim, uint32_t now) {
+    face_anim_             = &anim;
+    scan_epoch_ms_         = now;
+    face_pose_             = avatar_face::poseAt(anim, 0);
+    face_blink_            = 1.0f;
+    face_anim_active_      = true;
+    last_face_anim_active_ = true;
+    avatar_face::blinkInit(anim, face_blink_state_, now);
+    face_eye_valid_[0]     = false;
+    face_eye_valid_[1]     = false;
+}
+
 void EyesCard::armState(BuddyState state, uint32_t now) {
     prev_state_ = state;
     switch (state) {
         case STATE_DISCONNECTED:
+            armAvatar(avatar_face::kSleep, now);
             disc_anim_start_ms_ = now;
             disc_age_ms_        = 0;
             for (auto& b : q_bubbles_) b.alive = false;
             draw_wait_gaze_dy_   = 0;
             break;
         case STATE_IDLE:
+            armAvatar(avatar_face::kIdle, now);
             blink_i_                = -1;
-            next_blink_ms_          = now + kBlinkIntervalMs;
-            next_glance_ms_         = now + kGlanceMinMs + (esp_random() % kGlanceJitterMs);
-            glance_event_start_ms_  = 0;
-            glance_event_side_      = +1;
             draw_dx_                = 0;
             draw_base_y_            = kBaseIdleY;
             for (auto& b : q_bubbles_) b.alive = false;
             draw_wait_gaze_dy_      = 0;
             break;
         case STATE_WORKING:
-            working_entered_ms_         = now;
-            scan_epoch_ms_              = now;
-            next_work_blink_ms_         = now + kWorkBlinkIntervalMs;
-            work_blink_step_deadline_ms_ = 0;
-            draw_work_blink_i_          = -1;
-            draw_blink_h_               = -1;
-            draw_dots_n_                = 0;
+            working_entered_ms_    = now;
+            armAvatar(avatar_face::kWorking, now);
+            draw_blink_h_          = -1;
             for (auto& b : q_bubbles_) b.alive = false;
-            draw_wait_gaze_dy_          = 0;
+            draw_wait_gaze_dy_     = 0;
             break;
         case STATE_WAITING:
             blink_i_                 = -1;
@@ -393,61 +342,6 @@ void EyesCard::tickBlink(uint32_t now) {
         blink_i_                 = 0;
         blink_step_deadline_ms_  = now + kBlinkStepMs;
     }
-}
-
-void EyesCard::tickGlanceIdle(uint32_t now) {
-    // No event in flight: count down to the next one.
-    if (glance_event_start_ms_ == 0) {
-        if ((int32_t)(now - next_glance_ms_) >= 0) {
-            glance_event_start_ms_ = now;
-            glance_event_side_     = (esp_random() & 1) ? +1 : -1;
-        }
-        draw_dx_ = 0;
-        return;
-    }
-
-    // Event in flight: piecewise eased motion through 5 phases.
-    //   t in [0,        E)            → ease 0 → A   (cubic ease-out)
-    //   t in [E,        E+H)          → hold A
-    //   t in [E+H,      E+H+E)        → ease A → B   (covers 2× the px)
-    //   t in [E+H+E,    E+H+E+H)      → hold B
-    //   t in [E+H+E+H,  E+H+E+H+E)    → ease B → 0
-    // Where A = +side·X, B = -side·X. Same per-hop ease duration as
-    // WAITING (700 ms) so the motion has the same calm character; the
-    // cross-side hop visibly moves faster because it covers 40 px in
-    // the same window — this reads as a confident sweep rather than a
-    // snap.
-    const uint32_t t  = now - glance_event_start_ms_;
-    const uint32_t E  = kGlanceEaseMs;
-    const uint32_t H  = kGlanceHoldEdgeMs;
-    const int      X  = kGlanceX;
-    const int      A  = (int)glance_event_side_ * X;
-    const int      B  = -A;
-
-    int dx;
-    if (t < E) {
-        const float k     = (float)t / (float)E;
-        const float eased = 1.0f - (1.0f - k) * (1.0f - k) * (1.0f - k);
-        dx = (int)((float)A * eased);
-    } else if (t < E + H) {
-        dx = A;
-    } else if (t < E + H + E) {
-        const float k     = (float)(t - E - H) / (float)E;
-        const float eased = 1.0f - (1.0f - k) * (1.0f - k) * (1.0f - k);
-        dx = A + (int)((float)(B - A) * eased);
-    } else if (t < E + H + E + H) {
-        dx = B;
-    } else if (t < E + H + E + H + E) {
-        const float k     = (float)(t - E - H - E - H) / (float)E;
-        const float eased = 1.0f - (1.0f - k) * (1.0f - k) * (1.0f - k);
-        dx = B + (int)((float)(0 - B) * eased);
-    } else {
-        // Event complete; queue the next one.
-        dx = 0;
-        glance_event_start_ms_ = 0;
-        next_glance_ms_        = now + kGlanceMinMs + (esp_random() % kGlanceJitterMs);
-    }
-    draw_dx_ = (int16_t)dx;
 }
 
 void EyesCard::tickWaitGaze(uint32_t now) {
@@ -514,96 +408,28 @@ void EyesCard::tickDone(uint32_t now_ms) {
         done_active_ = false;
         return;
     }
-    // Natural exit at the timeout.
-    if ((now_ms - done_start_ms_) >= kDoneTotalMs) {
+    // Natural exit once the celebration has played through once.
+    if ((now_ms - done_start_ms_) >= avatar_face::loopMs(avatar_face::kDone)) {
         done_active_ = false;
     }
 }
 
-void EyesCard::drawDoneFrame(Adafruit_ST7789& tft, uint32_t t) {
-    // Lazy-allocate the per-eye canvases on first use. Persisted for the
-    // card's lifetime; matches work_canvas_ / wait_q_canvas_ pattern.
-    if (!done_canvas_l_) done_canvas_l_ = new GFXcanvas16(kDoneCanvasW, kDoneCanvasH);
-    if (!done_canvas_r_) done_canvas_r_ = new GFXcanvas16(kDoneCanvasW, kDoneCanvasH);
-    if (!done_canvas_l_ || !done_canvas_r_) return;  // OOM: silently skip frame
-
-    // The full celebration is kDoneLoopMs * kDoneLoops long; the per-loop
-    // phase clock is t modulo one loop length.
-    const uint32_t t_loop = t % kDoneLoopMs;
-
-    int  w, h, top_y;
-    bool ellipse_shape;
-
-    if (t_loop < kDonePhase1End) {
-        // Phase 1: bounce up. H 30->38, W 30->32, top 52->44 (eased).
-        const float k = ease_out_cubic((float)t_loop / (float)kDoneBounceUpMs);
-        w     = irlerp(30, 32, k);
-        h     = irlerp(30, 38, k);
-        top_y = irlerp(kBaseIdleY, 44, k);
-        ellipse_shape = false;
-    } else if (t_loop < kDonePhase2End) {
-        // Phase 2: settle low. H 38->28, W 32, top 44->56 (eased).
-        const float k = ease_out_cubic((float)(t_loop - kDonePhase1End) / (float)kDoneSettleLowMs);
-        w     = 32;
-        h     = irlerp(38, 28, k);
-        top_y = irlerp(44, 56, k);
-        ellipse_shape = false;
-    } else if (t_loop < kDonePhase3End) {
-        // Phase 3: morph. H 28->16, W 30, top fixed at 56. Switch shape to
-        // upper-half ellipse — at H=28 the ellipse looks like a tall dome,
-        // at H=16 the canonical ^_^ smile. The shape change at t=200 reads
-        // as the eyes "closing into smiles."
-        const float k = ease_out_cubic((float)(t_loop - kDonePhase2End) / (float)kDoneMorphMs);
-        w     = 30;
-        h     = irlerp(28, kDoneArcH, k);
-        top_y = kDoneArcTop;
-        ellipse_shape = true;
-    } else if (t_loop < kDonePhase4End) {
-        // Phase 4: hold ^_^ for 750 ms.
-        w     = 30;
-        h     = kDoneArcH;
-        top_y = kDoneArcTop;
-        ellipse_shape = true;
-    } else {
-        // Phase 5: return to idle. H 16->30, W 30, top 56->52 (eased).
-        // Stay on the ellipse shape during the return — at H=30 the half-
-        // ellipse is a tall dome that's similar enough to the IDLE rect
-        // that the loop boundary handover reads as the eyes opening back up.
-        const uint32_t phase5_dur = kDoneLoopMs - kDonePhase4End;  // 400 ms
-        const float k = ease_out_cubic((float)(t_loop - kDonePhase4End) / (float)phase5_dur);
-        w     = 30;
-        h     = irlerp(kDoneArcH, 30, k);
-        top_y = irlerp(kDoneArcTop, kBaseIdleY, k);
-        ellipse_shape = true;
+void EyesCard::drawDoneFrame(Adafruit_ST7789& tft, uint32_t t, bool full_clear) {
+    // Same canvas-per-eye path as every other avatar state; only the sparkles
+    // below are specific to the celebration.
+    if (!face_canvas_) {
+        face_canvas_ = new GFXcanvas16(avatar_face::kMaxCanvasW,
+                                       avatar_face::kMaxCanvasH);
     }
+    if (!face_canvas_) return;  // OOM: silently skip the frame
 
-    // Render each eye via its canvas: clear, draw shape, push as one bitmap.
-    auto draw_eye = [&](GFXcanvas16* c, int canvas_x) {
-        c->fillScreen(ST77XX_BLACK);
-        const int local_top    = top_y - kDoneCanvasY;
-        const int local_bottom = local_top + h - 1;
-        const int x_offset     = (kDoneCanvasW - w) / 2;
-        if (ellipse_shape) {
-            // Center horizontally; rx = w/2, ry = h.
-            drawUpperHalfEllipse(*c, kDoneCanvasW / 2, local_bottom,
-                                 w / 2, h, ST77XX_WHITE);
-        } else {
-            c->fillRect(x_offset, local_top, w, h, ST77XX_WHITE);
-        }
-        tft.drawRGBBitmap(canvas_x, kDoneCanvasY, c->getBuffer(),
-                          kDoneCanvasW, kDoneCanvasH);
-    };
+    drawAvatarEye(tft, 0, -1, full_clear);
+    drawAvatarEye(tft, 1, +1, full_clear);
 
-    draw_eye(done_canvas_l_, kDoneCanvasLeftX);
-    draw_eye(done_canvas_r_, kDoneCanvasRightX);
-
-    // Sparkles: a 4-point cross at every kDoneSparkleAnchors[] entry. For
-    // each anchor: erase its bbox, then draw n blocks (0..5) outer-first so
-    // the visual centroid stays steady as brightness drops:
-    //   center always drawn first when n >= 1
-    //   then ±x satellites at n >= 2 (right) and n >= 3 (left)
-    //   then ±y satellites at n >= 4 (up) and n >= 5 (down)
-    // Each "block" is a 3 × 3 fillRect at (anchor - 1, anchor - 1).
+    // Sparkles last, for the same reason as the sweat bead and sleep Zs: an
+    // eye canvas can reach into these bands and would paint them out.
+    // Each anchor erases its own bbox, then draws n blocks outer-first so the
+    // visual centroid stays put as the brightness drops.
     const uint8_t n = doneSparkleCount(t);
     for (int i = 0; i < kDoneSparkleN; i++) {
         const int cx = kDoneSparkleAnchors[i].cx;
@@ -620,31 +446,21 @@ void EyesCard::drawDoneFrame(Adafruit_ST7789& tft, uint32_t t) {
 }
 
 uint8_t EyesCard::doneSparkleCount(uint32_t t) const {
-    // Brightness shape (per loop):
-    //   phase 1 (0..100):       0.0 -> 0.5 (linear)
-    //   phase 2 (100..200):     0.5 -> 1.0 (linear)
-    //   phase 3 (200..350):     1.0 (hold)
-    //   phase 4 (350..1100):    1.0 -> 0.0 (linear over 750 ms)
-    //   phase 5 (1100..1500):   0.0
-    // Quantized to 0..5 visible pixels (5 = full bright cross, 0 = hidden).
-    // The 5 pixels fade out outer-first, leaving the center until last.
-    // Multi-loop: the curve restarts each loop so the sparkles re-pop.
-    const uint32_t t_loop = t % kDoneLoopMs;
+    // Ramp in, hold, fade out across the one pass. Quantised to 0..5 blocks:
+    // 5 means brightness in [0.9, 1.0], 4 in [0.7, 0.9), and so on.
     float b;
-    if (t_loop < kDonePhase1End) {
-        b = 0.5f * ((float)t_loop / (float)kDoneBounceUpMs);
-    } else if (t_loop < kDonePhase2End) {
-        b = 0.5f + 0.5f * ((float)(t_loop - kDonePhase1End) / (float)kDoneSettleLowMs);
-    } else if (t_loop < kDonePhase3End) {
+    if (t < kDoneSparkleRampMs) {
+        b = (float)t / (float)kDoneSparkleRampMs;
+    } else if (t < kDoneSparkleRampMs + kDoneSparkleHoldMs) {
         b = 1.0f;
-    } else if (t_loop < kDonePhase4End) {
-        b = 1.0f - ((float)(t_loop - kDonePhase3End) / (float)kDoneHoldMs);
     } else {
-        b = 0.0f;
+        const uint32_t into = t - kDoneSparkleRampMs - kDoneSparkleHoldMs;
+        b = (into >= kDoneSparkleFadeMs)
+            ? 0.0f
+            : 1.0f - ((float)into / (float)kDoneSparkleFadeMs);
     }
     if (b <= 0.0f) return 0;
     if (b >= 1.0f) return 5;
-    // Quantize: 5 pixels means b in [0.9, 1.0], 4 in [0.7, 0.9), etc.
     const int n = (int)lroundf(b * 5.0f);
     return (uint8_t)(n < 0 ? 0 : (n > 5 ? 5 : n));
 }
@@ -667,59 +483,68 @@ void EyesCard::tick(uint32_t now_ms) {
 
     if (done_active_) tickDone(now_ms);
 
+    // The celebration borrows the avatar machinery: arm it once DONE is live
+    // and hand back to the live state's own animation when it ends. Its epoch
+    // is the celebration start, so t runs 0..loop across the burst.
+    if (done_active_) {
+        if (face_anim_ != &avatar_face::kDone) {
+            armAvatar(avatar_face::kDone, done_start_ms_);
+        }
+    } else if (face_anim_ == &avatar_face::kDone) {
+        armAvatar(state == STATE_WORKING ? avatar_face::kWorking
+                : state == STATE_DISCONNECTED ? avatar_face::kSleep
+                                              : avatar_face::kIdle, now_ms);
+    }
+
     switch (state) {
         case STATE_DISCONNECTED:
             disc_age_ms_ = now_ms - disc_anim_start_ms_;
-            break;
-
-        case STATE_IDLE: {
-            tickBlink(now_ms);
-            tickGlanceIdle(now_ms);   // sets draw_dx_
-            // y offset eases proportionally with |dx|: looking up at the
-            // peaks (-10 px) and flat at centre. kGlanceDy is negative.
-            const int abs_dx = (draw_dx_ < 0) ? -draw_dx_ : draw_dx_;
-            draw_base_y_ = (int16_t)(kBaseIdleY + (kGlanceDy * abs_dx) / kGlanceX);
-            draw_h_      = (blink_i_ >= 0) ? kBlinkH[blink_i_] : 30;
-            break;
-        }
-
+            // falls through: the sleeping face animates like the others
+        case STATE_IDLE:
         case STATE_WORKING: {
+            const avatar_face::Anim& anim = *face_anim_;
             const uint32_t t = now_ms - scan_epoch_ms_;
-            const float    twoPi = 2.0f * 3.14159265f;
+            // A DONE burst runs its own dressing, not IDLE's.
 
-            // Slow horizontal gaze drift, 1.4 s period.
-            draw_dx_ = (int16_t)lroundf(kWorkDriftAmp *
-                          sinf(twoPi * (float)t / (float)kWorkDriftMs));
+            // Blink scheduling owns the randomness; the geometry module stays
+            // platform-free so it can be unit tested natively.
+            avatar_face::blinkTick(anim, face_blink_state_, now_ms,
+                                   (float)esp_random() / 4294967296.0f);
 
-            // Breathing height, 1.1 s period — h ∈ [7, 11].
-            const int breathe_h = kWorkBaseH +
-                (int)lroundf(kWorkBreatheAmp *
-                             sinf(twoPi * (float)t / (float)kWorkBreatheMs));
+            face_pose_  = avatar_face::poseAt(anim, t);
+            face_blink_ = avatar_face::blinkFactor(anim, face_blink_state_, now_ms);
 
-            // Rare blink, separate timer from IDLE/WAITING blink_i_.
-            if (draw_work_blink_i_ >= 0) {
-                if (now_ms >= work_blink_step_deadline_ms_) {
-                    draw_work_blink_i_++;
-                    if (draw_work_blink_i_ >= kWorkBlinkN) {
-                        draw_work_blink_i_   = -1;
-                        next_work_blink_ms_  = now_ms + kWorkBlinkIntervalMs;
-                    } else {
-                        work_blink_step_deadline_ms_ = now_ms + kWorkBlinkStepMs;
-                    }
-                }
-            } else if (now_ms >= next_work_blink_ms_) {
-                draw_work_blink_i_           = 0;
-                work_blink_step_deadline_ms_ = now_ms + kWorkBlinkStepMs;
+            // The pose only moves during a step's transition; holds are
+            // pixel-identical, so outside a transition or blink there is
+            // nothing to redraw and isDirty() can report clean.
+            face_anim_active_ = avatar_face::inTransition(anim, t) ||
+                                avatar_face::blinkActive(anim, face_blink_state_, now_ms);
+
+            if (state == STATE_WORKING) {
+                const float twoPi = 2.0f * 3.14159265f;
+                shake_x_ = (int8_t)lroundf(kShakeAmpPx *
+                    sinf(twoPi * (float)(now_ms % kShakeXPeriodMs) / (float)kShakeXPeriodMs));
+                shake_y_ = (int8_t)lroundf(kShakeAmpPx *
+                    sinf(twoPi * (float)(now_ms % kShakeYPeriodMs) / (float)kShakeYPeriodMs));
+
+                const uint32_t sweat_t = t % kSweatCycleMs;
+                sweat_y_ = (sweat_t < kSweatDripMs)
+                    ? (int16_t)(kSweatTopY + (int)((int32_t)kSweatDripPx *
+                                                   (int32_t)sweat_t / (int32_t)kSweatDripMs))
+                    : (int16_t)-1;
+            } else {
+                shake_x_ = 0;
+                shake_y_ = 0;
+                sweat_y_ = -1;
             }
 
-            // Final eye height: blink overrides breathing if a blink is in progress.
-            const bool blinking = (draw_work_blink_i_ >= 0);
-            draw_h_       = blinking ? kWorkBlinkH[draw_work_blink_i_] : breathe_h;
-            draw_blink_h_ = blinking ? (int8_t)kWorkBlinkH[draw_work_blink_i_] : (int8_t)-1;
+            // The generic dirty-tracking fields below are unused by this
+            // state (see isDirty), but keep them parked at a fixed value so a
+            // later state change can't inherit stale motion.
+            draw_dx_      = 0;
+            draw_h_       = 30;
+            draw_blink_h_ = -1;
             draw_base_y_  = kBaseIdleY;
-
-            // Typing dots: 0..3 over 1.5 s (4 phases × 375 ms each).
-            draw_dots_n_ = (uint8_t)((t / (kWorkDotsMs / 4u)) % 4u);
             break;
         }
 
@@ -762,11 +587,26 @@ bool EyesCard::isDirty() const {
         return false;  // DONE bypasses the IDLE-era checks below
     }
 
+    // ---- IDLE / WORKING: the avatar animation's own motion decides. One
+    //      extra frame after motion stops commits the settled pose, then the
+    //      state goes quiet for the rest of the hold.
+    if (face_anim_) {
+        // The WORKING jitter and sweat bead move on their own clock, so they
+        // keep the state dirty right through the animation's holds.
+        if (last_shake_x_ != shake_x_ || last_shake_y_ != shake_y_) return true;
+        if (last_sweat_y_ != sweat_y_)                              return true;
+        // Same for the sleep Zs, which drift a pixel every ~66 ms. Bucketing
+        // at 32 ms cannot miss a step, and keeps the sleeping face from being
+        // re-blitted on every one of its otherwise-idle frames.
+        if (state_.buddyState() == STATE_DISCONNECTED &&
+            (last_disc_age_ / 32) != (disc_age_ms_ / 32)) return true;
+        return face_anim_active_ || last_face_anim_active_;
+    }
+
     if (last_h_          != draw_h_)            return true;
     if (last_dx_         != draw_dx_)           return true;
     if (last_base_y_     != draw_base_y_)       return true;
     if (last_blink_h_    != draw_blink_h_)      return true;
-    if (last_dots_n_     != draw_dots_n_)       return true;
     if (last_disc_age_   != disc_age_ms_)       return true;
     if (last_wait_gaze_dy_ != draw_wait_gaze_dy_) return true;
     const bool badge_now = (state_.buddyState() == STATE_WAITING &&
@@ -791,10 +631,11 @@ void EyesCard::render(Display& display) {
         // this state-transition moment matches the pattern every other
         // armState case uses (CLAUDE.md allows fillScreen at state
         // transitions; only continuous-animation frames must avoid it).
-        if (!last_done_active_) {
+        const bool done_entry = !last_done_active_;
+        if (done_entry) {
             tft.fillScreen(ST77XX_BLACK);
         }
-        drawDoneFrame(tft, t);
+        drawDoneFrame(tft, t, done_entry);
         last_done_active_          = true;
         last_done_phase_t_         = (t / 16) * 16;       // 16 ms buckets
         last_sparkle_brightness_n_ = doneSparkleCount(t);
@@ -816,7 +657,10 @@ void EyesCard::render(Display& display) {
     last_dx_       = draw_dx_;
     last_base_y_   = draw_base_y_;
     last_blink_h_  = draw_blink_h_;
-    last_dots_n_   = draw_dots_n_;
+    last_face_anim_active_ = face_anim_active_;
+    last_shake_x_  = shake_x_;
+    last_shake_y_  = shake_y_;
+    last_sweat_y_  = sweat_y_;
     last_wait_gaze_dy_  = draw_wait_gaze_dy_;
     last_badge_visible_ = (bs == STATE_WAITING && prompt_.mode == PROMPT_UI_COLLAPSED);
     last_disc_age_ = disc_age_ms_;
@@ -825,100 +669,39 @@ void EyesCard::render(Display& display) {
 }
 
 void EyesCard::drawFrame(Adafruit_ST7789& tft, BuddyState state, bool full_clear) {
-    if (state == STATE_DISCONNECTED) {
-        if (full_clear) {
-            tft.fillScreen(ST77XX_BLACK);
-        } else {
-            // Erase only the Z glyph bounding zone: ~2100 px vs 32400
-            // for fillScreen — eliminates the ~13 ms full-screen black flash
-            // that causes flicker at 62 fps.
-            tft.fillRect(kZSpawnX, kZSpawnY + kZDriftY - 2,
-                         240 - kZSpawnX, -kZDriftY + 3 * 8 + 4,
-                         ST77XX_BLACK);
+    if (state == STATE_DISCONNECTED || state == STATE_IDLE ||
+        state == STATE_WORKING) {
+        // render() can land before the first tick() after invalidate(), when
+        // armState has not yet picked the animation for the live state.
+        if (!face_anim_) {
+            armAvatar(state == STATE_WORKING ? avatar_face::kWorking
+                                             : avatar_face::kIdle, millis());
         }
 
-        const int cy  = kBaseIdleY + 15;       // 67
-        const int top = cy - kLidH / 2;        // 62
-        tft.fillRect(kLeftX,  top, kEyeW, kLidH, ST77XX_WHITE);
-        tft.fillRect(kRightX, top, kEyeW, kLidH, ST77XX_WHITE);
-
-        const uint32_t base = disc_age_ms_ % kZLoopMs;
-        const uint32_t offsets[3] = {0, 1000, 2000};
-        for (int i = 0; i < 3; i++) {
-            uint32_t age = (base + offsets[i]) % kZLoopMs;  // 0..2999
-
-            int x = kZSpawnX + (int)((int32_t)kZDriftX * (int32_t)age / (int32_t)kZLoopMs);
-            int y = kZSpawnY + (int)((int32_t)kZDriftY * (int32_t)age / (int32_t)kZLoopMs);
-
-            uint8_t size;
-            if      (age < 1000) size = 1;
-            else if (age < 2000) size = 2;
-            else                 size = 3;
-
-            uint16_t col;
-            if      (age < 1800) col = ST77XX_WHITE;
-            else if (age < 2550) col = kDimGrey;
-            else                 continue;  // last ~450 ms: don't draw
-
-            tft.setCursor(x, y);
-            tft.setTextSize(size);
-            tft.setTextColor(col);
-            tft.print('Z');
-        }
-        return;
-    }
-
-    if (state == STATE_WORKING) {
         // Tearing-free render: each eye is composed off-screen in a
-        // 54×21 GFXcanvas16, then pushed to the LCD as one continuous
-        // SPI burst via drawRGBBitmap. The rotated-slit shape changes
-        // every frame (h breathes, dx drifts), so the previous bbox-
-        // erase-then-fillTriangle approach briefly blacked out the
-        // slit each frame and the LCD scanline could catch a
-        // half-finished frame. Composing in RAM means the LCD pixels
-        // go directly OLD → NEW without any black intermediate.
+        // GFXcanvas16 sized to the worst-case single-eye bounding box, then
+        // pushed to the LCD as one continuous SPI burst via drawRGBBitmap.
+        // Composing in RAM means the LCD pixels go straight from OLD to NEW
+        // with no black intermediate for the scanline to catch.
         //
         // Canvas allocated lazily so non-WORKING sessions pay nothing.
-        if (!work_canvas_) {
-            work_canvas_ = new GFXcanvas16(kWorkEraseW, kWorkEraseH);
+        if (!face_canvas_) {
+            face_canvas_ = new GFXcanvas16(avatar_face::kMaxCanvasW,
+                                           avatar_face::kMaxCanvasH);
         }
+        if (!face_canvas_) return;  // OOM: silently skip the frame
 
         if (full_clear) {
             tft.fillScreen(ST77XX_BLACK);
         }
 
-        const int origin_y = kWorkEyeCy - kWorkEraseH / 2;
-        const int local_cy = kWorkEraseH / 2;
-
-        // LEFT eye
-        work_canvas_->fillScreen(ST77XX_BLACK);
-        const int left_origin_x = kWorkLeftCx - kWorkEraseW / 2;
-        const int local_cx_l    = (kWorkLeftCx + draw_dx_) - left_origin_x;
-        drawRotatedSlit(*work_canvas_, local_cx_l, local_cy, draw_h_, +1);
-        tft.drawRGBBitmap(left_origin_x, origin_y,
-                          work_canvas_->getBuffer(),
-                          kWorkEraseW, kWorkEraseH);
-
-        // RIGHT eye
-        work_canvas_->fillScreen(ST77XX_BLACK);
-        const int right_origin_x = kWorkRightCx - kWorkEraseW / 2;
-        const int local_cx_r     = (kWorkRightCx + draw_dx_) - right_origin_x;
-        drawRotatedSlit(*work_canvas_, local_cx_r, local_cy, draw_h_, -1);
-        tft.drawRGBBitmap(right_origin_x, origin_y,
-                          work_canvas_->getBuffer(),
-                          kWorkEraseW, kWorkEraseH);
-
-        // Typing dots — only redraw when the count changes (cheap small
-        // circles). Erase rect covers all 3 positions.
-        if (full_clear || draw_dots_n_ != last_dots_n_) {
-            if (!full_clear) {
-                tft.fillRect(kDotsEraseX, kDotsEraseY,
-                             kDotsEraseW, kDotsEraseH, ST77XX_BLACK);
-            }
-            for (uint8_t i = 0; i < draw_dots_n_; i++) {
-                tft.fillCircle(kDotsX[i], kDotsY, kDotR, ST77XX_WHITE);
-            }
-        }
+        // Slot 0 is the left eye (side -1), slot 1 the right (side +1).
+        drawAvatarEye(tft, 0, -1, full_clear);
+        drawAvatarEye(tft, 1, +1, full_clear);
+        // Both after the eyes: a far-out eye's canvas reaches into these
+        // bands and would otherwise paint them out with its black margin.
+        if (state == STATE_WORKING)      drawSweatDrop(tft);
+        if (state == STATE_DISCONNECTED) drawSleepZs(tft);
         return;
     }
 
@@ -1079,48 +862,6 @@ void EyesCard::drawFrame(Adafruit_ST7789& tft, BuddyState state, bool full_clear
         return;
     }
 
-    if (state == STATE_IDLE) {
-        // Differential update against last_*. Pixels in the (old ∩ new)
-        // overlap are never written, so they can't tear through black
-        // — the previous bbox-erase-then-redraw approach briefly
-        // blacked out ~28×30 px of the eye every frame and the LCD
-        // scanline could catch a half-finished frame. Now we only
-        // touch the small slivers that actually changed.
-        if (full_clear) {
-            tft.fillScreen(ST77XX_BLACK);
-            if (draw_h_ > 0) {
-                const int new_top = draw_base_y_ + 15 - draw_h_ / 2;
-                tft.fillRect(kLeftX  + draw_dx_, new_top, kEyeW, draw_h_, ST77XX_WHITE);
-                tft.fillRect(kRightX + draw_dx_, new_top, kEyeW, draw_h_, ST77XX_WHITE);
-            }
-            return;
-        }
-
-        const int new_top = draw_base_y_ + 15 - draw_h_ / 2;
-        const int old_top = last_base_y_ + 15 - last_h_  / 2;
-
-        // Left eye: erase OLD-NEW (going to black), draw NEW-OLD (going to white).
-        drawRectsAMinusB(tft,
-                         kLeftX + last_dx_, old_top, kEyeW, last_h_,
-                         kLeftX + draw_dx_, new_top, kEyeW, draw_h_,
-                         ST77XX_BLACK);
-        drawRectsAMinusB(tft,
-                         kLeftX + draw_dx_, new_top, kEyeW, draw_h_,
-                         kLeftX + last_dx_, old_top, kEyeW, last_h_,
-                         ST77XX_WHITE);
-
-        // Right eye: same.
-        drawRectsAMinusB(tft,
-                         kRightX + last_dx_, old_top, kEyeW, last_h_,
-                         kRightX + draw_dx_, new_top, kEyeW, draw_h_,
-                         ST77XX_BLACK);
-        drawRectsAMinusB(tft,
-                         kRightX + draw_dx_, new_top, kEyeW, draw_h_,
-                         kRightX + last_dx_, old_top, kEyeW, last_h_,
-                         ST77XX_WHITE);
-        return;
-    }
-
     // Catch-all fallback for any future state that doesn't have its own
     // branch above. Full-clear is fine here because we won't be running
     // a continuous animation.
@@ -1132,33 +873,123 @@ void EyesCard::drawFrame(Adafruit_ST7789& tft, BuddyState state, bool full_clear
     tft.fillRect(kRightX + draw_dx_, top, kEyeW, h, ST77XX_WHITE);
 }
 
-void EyesCard::drawRotatedSlit(Adafruit_GFX& gfx, int cx, int cy, int h, int sign) {
-    if (h <= 0) return;
+// Render one WORKING eye. The eye roams most of the panel, so the canvas
+// follows it: each frame it is centred on the eye's current bounding box, the
+// strips the previous frame's canvas occupied but this one doesn't are erased,
+// and the canvas is then blitted over the rest. Only the vacated strips ever
+// go through black, which keeps the animation flicker-free without the
+// per-frame fillScreen that CLAUDE.md rules out.
+// Sleep Zs: three glyphs on one 3 s loop, each offset a second apart, drifting
+// up and to the right as they grow and then dim out. Unchanged from the
+// pre-avatar DISCONNECTED screen — only the eyes underneath them changed.
+void EyesCard::drawSleepZs(Adafruit_ST7789& tft) {
+    // Erase only the Z zone. It sits right of x=210 and the sleeping face
+    // never reaches past x=187, so this can never bite into an eye.
+    tft.fillRect(kZSpawnX, kZSpawnY + kZDriftY - 2,
+                 240 - kZSpawnX, -kZDriftY + 3 * 8 + 4, ST77XX_BLACK);
 
-    // Width-axis basis (constant; width = kEyeW). For sign = -1, negate the y component.
-    const float ux = (kEyeW * 0.5f) * kCos15;
-    const float uy = (kEyeW * 0.5f) * kSin15 * (float)sign;
+    const uint32_t base = disc_age_ms_ % kZLoopMs;
+    const uint32_t offsets[3] = {0, 1000, 2000};
+    for (int i = 0; i < 3; i++) {
+        uint32_t age = (base + offsets[i]) % kZLoopMs;  // 0..2999
 
-    // Height-axis basis (per-frame because h varies). For sign = -1, negate the x component.
-    const float halfH = h * 0.5f;
-    const float vx = -halfH * kSin15 * (float)sign;
-    const float vy =  halfH * kCos15;
+        int x = kZSpawnX + (int)((int32_t)kZDriftX * (int32_t)age / (int32_t)kZLoopMs);
+        int y = kZSpawnY + (int)((int32_t)kZDriftY * (int32_t)age / (int32_t)kZLoopMs);
 
-    // Four corners (top-left, top-right, bottom-right, bottom-left).
-    // R(+θ)·(±W/2, ±h/2) — y-axis points DOWN in screen coords, but the same
-    // formula works because we treat (vx, vy) as the vertical-edge offset.
-    const int16_t tlx = (int16_t)lroundf(cx - ux + vx);
-    const int16_t tly = (int16_t)lroundf(cy - uy + vy);
-    const int16_t trx = (int16_t)lroundf(cx + ux + vx);
-    const int16_t try_ = (int16_t)lroundf(cy + uy + vy);
-    const int16_t brx = (int16_t)lroundf(cx + ux - vx);
-    const int16_t bry = (int16_t)lroundf(cy + uy - vy);
-    const int16_t blx = (int16_t)lroundf(cx - ux - vx);
-    const int16_t bly = (int16_t)lroundf(cy - uy - vy);
+        uint8_t size;
+        if      (age < 1000) size = 1;
+        else if (age < 2000) size = 2;
+        else                 size = 3;
 
-    // Two triangles split the parallelogram along the TL→BR diagonal.
-    // Adafruit_GFX::fillTriangle is virtual, so this dispatches to either
-    // the TFT driver or a GFXcanvas16 depending on the caller.
-    gfx.fillTriangle(tlx, tly, trx, try_, brx, bry, ST77XX_WHITE);
-    gfx.fillTriangle(tlx, tly, brx, bry, blx, bly, ST77XX_WHITE);
+        uint16_t col;
+        if      (age < 1800) col = ST77XX_WHITE;
+        else if (age < 2550) col = kDimGrey;
+        else                 continue;  // last ~450 ms: don't draw
+
+        tft.setCursor(x, y);
+        tft.setTextSize(size);
+        tft.setTextColor(col);
+        tft.print('Z');
+    }
+}
+
+// Anime-style bead: a rounded drop with a taper on top, sliding down the
+// right margin. Erase-then-draw over a 12x28 band is ~340 px, well inside the
+// per-frame budget CLAUDE.md sets for continuous animations.
+void EyesCard::drawSweatDrop(Adafruit_ST7789& tft) {
+    tft.fillRect(kSweatBandX, kSweatBandY, kSweatBandW, kSweatBandH, ST77XX_BLACK);
+    if (sweat_y_ < 0) return;
+
+    const int cy = sweat_y_;
+    tft.fillTriangle(kSweatCx, cy - kSweatTipH - kSweatR + 1,
+                     kSweatCx - kSweatR, cy,
+                     kSweatCx + kSweatR, cy, kSweatBlue);
+    tft.fillCircle(kSweatCx, cy, kSweatR, kSweatBlue);
+}
+
+void EyesCard::drawAvatarEye(Adafruit_ST7789& tft, int slot, int side,
+                               bool full_clear) {
+    // One canvas size serves both animations; see face_canvas_.
+    const int cw = avatar_face::kMaxCanvasW;
+    const int ch = avatar_face::kMaxCanvasH;
+
+    const int n = avatar_face::eyeOutline(*face_anim_, face_pose_, side,
+                                          face_blink_, face_pts_,
+                                          avatar_face::kMaxOutlinePoints);
+    // Shift the outline, not the canvas: moving the canvas alone would slide
+    // the spans the other way inside it and leave the eye pixel-static.
+    for (int i = 0; i < n; i++) {
+        face_pts_[i].x += (float)shake_x_;
+        face_pts_[i].y += (float)shake_y_;
+    }
+    if (n == 0) {
+        // The eye has rotated behind the body. Wipe whatever it left behind.
+        // The bundled keyframes never reach this, but the upstream animation
+        // format allows it and the erase is cheap insurance.
+        if (!full_clear && face_eye_valid_[slot]) {
+            tft.fillRect(face_eye_x_[slot], face_eye_y_[slot], cw, ch, ST77XX_BLACK);
+        }
+        face_eye_valid_[slot] = false;
+        return;
+    }
+
+    float x0 = face_pts_[0].x, x1 = face_pts_[0].x;
+    float y0 = face_pts_[0].y, y1 = face_pts_[0].y;
+    for (int i = 1; i < n; i++) {
+        if (face_pts_[i].x < x0) x0 = face_pts_[i].x;
+        if (face_pts_[i].x > x1) x1 = face_pts_[i].x;
+        if (face_pts_[i].y < y0) y0 = face_pts_[i].y;
+        if (face_pts_[i].y > y1) y1 = face_pts_[i].y;
+    }
+
+    // Centre the canvas on the eye, then pull it back inside the panel. The
+    // canvas is at least as large as any single eye in either animation (both
+    // asserted by test_avatar_face), so clamping can only ever shift it toward
+    // the screen interior while still covering the eye.
+    int ox = (int)lroundf((x0 + x1) * 0.5f) - cw / 2;
+    int oy = (int)lroundf((y0 + y1) * 0.5f) - ch / 2;
+    if (ox < 0) ox = 0;
+    if (oy < 0) oy = 0;
+    if (ox > 240 - cw) ox = 240 - cw;
+    if (oy > 135 - ch) oy = 135 - ch;
+
+    avatar_face::Span spans[avatar_face::kMaxCanvasH];
+    avatar_face::outlineSpans(face_pts_, n, ox, oy, spans, ch, cw);
+    face_canvas_->fillScreen(ST77XX_BLACK);
+    for (int row = 0; row < ch; row++) {
+        if (spans[row].x1 < spans[row].x0) continue;
+        face_canvas_->drawFastHLine(spans[row].x0, row,
+                                    spans[row].x1 - spans[row].x0 + 1,
+                                    ST77XX_WHITE);
+    }
+
+    if (!full_clear && face_eye_valid_[slot]) {
+        drawRectsAMinusB(tft, face_eye_x_[slot], face_eye_y_[slot], cw, ch,
+                              ox, oy, cw, ch, ST77XX_BLACK);
+    }
+    tft.drawRGBBitmap(ox, oy, face_canvas_->getBuffer(), cw, ch);
+
+    face_eye_x_[slot]     = (int16_t)ox;
+    face_eye_y_[slot]     = (int16_t)oy;
+    face_eye_valid_[slot] = true;
 }

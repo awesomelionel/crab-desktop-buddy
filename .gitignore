@@ -5,3 +5,5 @@
 .superpowers/
 /deskhog_src/
 .vscode/
+__pycache__/
+*.pyc
